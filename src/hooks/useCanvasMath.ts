@@ -44,7 +44,6 @@ export const useCanvasMath = ({ cameraRef, rectRef }: UseCanvasMathProps) => {
       const scaleFactor = deltaY > 0 ? 0.9 : 1.1
       const newZoom = Math.min(Math.max(cam.zoom * scaleFactor, 0.05), 50)
 
-      // World point under mouse remains stable
       const worldX = (mouseX - rect.left - cam.x) / cam.zoom
       const worldY = (mouseY - rect.top - cam.y) / cam.zoom
 

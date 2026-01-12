@@ -3,7 +3,6 @@ import { Camera } from "../../types"
 
 export const Grid: FC<{ camera: Camera }> = ({ camera }) => {
   const gridSize = 100
-  // Use the camera zoom to scale the grid stroke so it stays thin
   const strokeWidth = 0.5 / camera.zoom
 
   return (

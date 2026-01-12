@@ -6,6 +6,7 @@ export interface Point {
 export interface Stroke {
   id: string
   points: Point[]
+  pathData?: string
   pressure: number[]
   layerId: string
   color: string

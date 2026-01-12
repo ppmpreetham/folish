@@ -3,10 +3,8 @@ import { useCanvasStore } from "../../stores/canvasStore"
 import { Tool } from "../../types"
 
 export const Toolbar: React.FC = () => {
-  // Pull values from state.ui
   const { activeTool, activeColor, activeWidth } = useCanvasStore((state) => state.ui)
 
-  // Pull actions and history status
   const { setActiveTool, setActiveColor, setActiveWidth, undo, redo, canUndo, canRedo } =
     useCanvasStore()
 

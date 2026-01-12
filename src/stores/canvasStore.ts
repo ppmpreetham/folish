@@ -94,7 +94,7 @@ export const useCanvasStore = create<CanvasStore>()(
           const [nextDoc, patches, inversePatches] = produceWithPatches(get().doc, recipe)
           set((state) => ({
             doc: nextDoc,
-            past: state.past.slice(-MAX_HISTORY),
+            past: [...state.past, { patches, inversePatches }].slice(-MAX_HISTORY),
             future: [],
           }))
         },

@@ -15,7 +15,7 @@ export const LayersPanel: React.FC = () => {
   } = useCanvasStore()
 
   return (
-    <div className="absolute top-4 right-4 w-64 bg-white rounded-xl shadow-lg p-4 space-y-3 border border-gray-200">
+    <div className="absolute top-4 right-4 w-lg bg-white rounded-xl shadow-lg p-4 space-y-3 border border-gray-200">
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-gray-800">Layers</h3>
         <button

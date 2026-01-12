@@ -5,6 +5,7 @@ import { Point, Camera } from "../../types"
 import { Grid } from "./Grid"
 import { Renderer } from "./Renderer"
 import simplify from "simplify-js"
+import { getStroke } from "perfect-freehand"
 
 export const InfiniteCanvas: React.FC = () => {
   const doc = useCanvasStore((state) => state.doc)
@@ -15,9 +16,7 @@ export const InfiniteCanvas: React.FC = () => {
   const rectRef = useRef<DOMRect | null>(null)
   const cameraRef = useRef<Camera>(ui.camera)
 
-  const currentPointsRef = useRef<Point[]>([])
-  const currentPressureRef = useRef<number[]>([])
-
+  const currentPointsRef = useRef<Array<[number, number, number]>>([])
   const [, forceUpdate] = useReducer((x) => x + 1, 0)
 
   useEffect(() => {
@@ -35,36 +34,42 @@ export const InfiniteCanvas: React.FC = () => {
     return () => window.removeEventListener("resize", updateRect)
   }, [])
 
-  const { handlePointerDown, handlePointerMove, handlePointerUp } = useCanvasEvents({
+  const { handlePointerDown, handlePointerMove, handlePointerUp, handleWheel } = useCanvasEvents({
     cameraRef,
     rectRef,
     activeTool: ui.activeTool,
-
     onStrokeStart: (p) => {
-      currentPointsRef.current = [{ x: p.x, y: p.y }]
-      currentPressureRef.current = [p.pressure]
+      currentPointsRef.current = [[p.x, p.y, p.pressure]]
     },
-
     onStrokeMove: (p) => {
-      currentPointsRef.current.push({ x: p.x, y: p.y })
-      currentPressureRef.current.push(p.pressure)
+      currentPointsRef.current.push([p.x, p.y, p.pressure])
       forceUpdate()
     },
-
     onStrokeEnd: () => {
       if (currentPointsRef.current.length < 2) return
 
-      const simplifiedPoints = simplify(currentPointsRef.current, 1.2, true)
-
-      const pressureStep = currentPressureRef.current.length / simplifiedPoints.length
-      const alignedPressure = simplifiedPoints.map((_, i) => {
-        return currentPressureRef.current[Math.floor(i * pressureStep)]
+      const strokeOutline = getStroke(currentPointsRef.current, {
+        size: ui.activeWidth * 2,
+        thinning: 0.65,
+        smoothing: 0.55,
+        streamline: 0.5,
+        simulatePressure: false,
       })
+
+      const pathData = getSvgPathFromStroke(strokeOutline)
+
+      const simplifiedPoints = simplify(
+        currentPointsRef.current.map(([x, y]) => ({ x, y })),
+        1.0,
+        true
+      )
 
       actions.addStroke({
         id: crypto.randomUUID(),
+
+        pathData,
         points: simplifiedPoints,
-        pressure: alignedPressure,
+        pressure: currentPointsRef.current.map(([, , p]) => p),
         color: ui.activeColor,
         width: ui.activeWidth,
         opacity: ui.activeOpacity,
@@ -74,10 +79,8 @@ export const InfiniteCanvas: React.FC = () => {
       })
 
       currentPointsRef.current = []
-      currentPressureRef.current = []
       forceUpdate()
     },
-
     onPanMove: (dx, dy) => {
       actions.setCamera({
         ...cameraRef.current,
@@ -85,39 +88,73 @@ export const InfiniteCanvas: React.FC = () => {
         y: cameraRef.current.y + dy,
       })
     },
-
     onZoom: (newCamera) => {
       actions.setCamera(newCamera)
     },
   })
 
-  const cursorClass = ui.activeTool === "pan" ? "cursor-grab" : "cursor-crosshair"
+  const cursorClass =
+    ui.activeTool === "pan" ? "cursor-grab active:cursor-grabbing" : "cursor-crosshair"
 
   return (
     <svg
       ref={containerRef}
-      className={`w-full h-full bg-slate-50 overflow-hidden touch-none ${cursorClass}`}
+      className={`w-full h-full bg-slate-50 overflow-hidden touch-none select-none ${cursorClass}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onWheel={handleWheel}
       onContextMenu={(e) => e.preventDefault()}
     >
       <g transform={`translate(${ui.camera.x}, ${ui.camera.y}) scale(${ui.camera.zoom})`}>
         <Grid camera={ui.camera} />
         <Renderer zoom={ui.camera.zoom} />
-        {currentPointsRef.current.length > 1 && (
-          <polyline
-            points={currentPointsRef.current.map((p) => `${p.x},${p.y}`).join(" ")}
-            fill="none"
-            stroke={ui.activeColor}
-            strokeWidth={(ui.activeWidth * (currentPressureRef.current[0] || 1)) / ui.camera.zoom}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={0.6}
-            className="pointer-events-none"
-          />
-        )}
+
+        {currentPointsRef.current.length > 1 &&
+          (() => {
+            const outline = getStroke(currentPointsRef.current, {
+              size: ui.activeWidth * 3.0,
+              thinning: 0.75,
+              smoothing: 0.52,
+              streamline: 0.5,
+              simulatePressure: false,
+              last: true,
+            })
+
+            const pathData = getSvgPathFromStroke(outline)
+
+            return (
+              <path
+                d={pathData}
+                fill={ui.activeColor}
+                stroke="none"
+                opacity={0.75}
+                className="pointer-events-none"
+              />
+            )
+          })()}
       </g>
     </svg>
   )
+}
+
+export function getSvgPathFromStroke(points: number[][]): string {
+  if (points.length < 4) return ""
+
+  const d: string[] = []
+
+  d.push(`M${points[0][0].toFixed(2)},${points[0][1].toFixed(2)}`)
+
+  for (let i = 1; i < points.length; i++) {
+    const midX = (points[i][0] + points[i - 1][0]) / 2
+    const midY = (points[i][1] + points[i - 1][1]) / 2
+    d.push(
+      `Q${points[i - 1][0].toFixed(2)},${points[i - 1][1].toFixed(2)} ` +
+        `${midX.toFixed(2)},${midY.toFixed(2)}`
+    )
+  }
+
+  d.push("Z")
+
+  return d.join(" ")
 }

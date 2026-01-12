@@ -10,8 +10,13 @@ pub struct Point {
 pub struct Stroke {
     id: String,
     points: Vec<Point>,
+    #[serde(rename = "pathData")]
+    path_data: Option<String>, 
+    pressure: Vec<f32>,        
     color: String,
     width: f32,
+    opacity: f32,              
+    tool: String,              
     #[serde(rename = "layerId")]
     layer_id: String,
     timestamp: i64,
@@ -39,13 +44,4 @@ pub struct Camera {
 pub struct CanvasState {
     layers: Vec<Layer>,
     strokes: std::collections::HashMap<String, Stroke>,
-    camera: Camera,
-    #[serde(rename = "activeLayerId")]
-    active_layer_id: String,
-    #[serde(rename = "activeTool")]
-    active_tool: String,
-    #[serde(rename = "activeColor")]
-    active_color: String,
-    #[serde(rename = "activeWidth")]
-    active_width: f32,
 }

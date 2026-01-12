@@ -20,12 +20,10 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
   const lastPosRef = useRef({ x: 0, y: 0 })
   const rafRef = useRef<number | undefined>(undefined)
 
-  // Use PointerEvents for Pressure + Tablet support
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       const isPan = props.activeTool === "pan" || e.button === 1 || e.ctrlKey || e.metaKey
 
-      // Capture the pointer so drawing continues outside the browser window
       ;(e.target as Element).setPointerCapture(e.pointerId)
       lastPosRef.current = { x: e.clientX, y: e.clientY }
 
@@ -39,9 +37,16 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
     [props.activeTool, toWorld, props.onStrokeStart]
   )
 
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      const newCamera = calculateZoom(e.deltaY, e.clientX, e.clientY)
+      props.onZoom(newCamera)
+    },
+    [calculateZoom, props.onZoom]
+  )
+
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      // Throttling with requestAnimationFrame (Crucial for 144Hz+ monitors)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
       rafRef.current = requestAnimationFrame(() => {
@@ -70,5 +75,5 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
     [props.onStrokeEnd]
   )
 
-  return { handlePointerDown, handlePointerMove, handlePointerUp }
+  return { handlePointerDown, handlePointerMove, handlePointerUp, handleWheel }
 }
