@@ -1,50 +1,45 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect } from "react"
+import { InfiniteCanvas } from "./components/Canvas/InfiniteCanvas"
+import { Toolbar } from "./components/UI/ToolBar"
+import { LayersPanel } from "./components/UI/Layers"
+import { useCanvasStore } from "./stores/canvasStore"
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const undo = useCanvasStore((state) => state.undo)
+  const redo = useCanvasStore((state) => state.redo)
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "z") {
+        e.preventDefault()
+        undo()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "z") {
+        e.preventDefault()
+        redo()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [undo, redo])
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="w-screen h-screen bg-slate-50 overflow-hidden relative">
+      <InfiniteCanvas />
+      <Toolbar />
+      <LayersPanel />
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      {/* Info Overlay */}
+      <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow text-sm text-gray-600">
+        <p>
+          <strong>Scroll: </strong> Zoom | <strong>Cmd+Drag:</strong> Pan | <strong>Drag:</strong>{" "}
+          Draw
+        </p>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
-  );
+    </div>
+  )
 }
 
-export default App;
+export default App

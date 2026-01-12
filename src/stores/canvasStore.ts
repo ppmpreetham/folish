@@ -85,7 +85,7 @@ export const useCanvasStore = create<CanvasStore>()(
         setCamera: (camera) => set((state) => ({ ui: { ...state.ui, camera } })),
         setActiveTool: (tool) => set((state) => ({ ui: { ...state.ui, activeTool: tool } })),
         setActiveColor: (color) => set((state) => ({ ui: { ...state.ui, activeColor: color } })),
-        setActiveOpacity: (opacity) =>
+        setActiveOpacity: (opacity: number) =>
           set((state) => ({ ui: { ...state.ui, activeOpacity: opacity } })),
         setActiveWidth: (width) => set((state) => ({ ui: { ...state.ui, activeWidth: width } })),
         setActiveLayer: (id) => set((state) => ({ ui: { ...state.ui, activeLayerId: id } })),
@@ -94,7 +94,7 @@ export const useCanvasStore = create<CanvasStore>()(
           const [nextDoc, patches, inversePatches] = produceWithPatches(get().doc, recipe)
           set((state) => ({
             doc: nextDoc,
-            past: [...state.past, { patches, inversePatches }].slice(-MAX_HISTORY),
+            past: state.past.slice(-MAX_HISTORY),
             future: [],
           }))
         },

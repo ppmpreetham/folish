@@ -1,1 +1,6 @@
 @import "tailwindcss";
+
+polyline[pressure-aware] {
+  stroke: url(#pressure-gradient);
+  stroke-width: var(--max-width);
+}
