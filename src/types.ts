@@ -6,9 +6,12 @@ export interface Point {
 export interface Stroke {
   id: string
   points: Point[]
+  pressure: number[]
+  layerId: string
   color: string
   width: number
-  layerId:  string
+  opacity: number
+  tool: Tool
   timestamp: number
 }
 
@@ -28,20 +31,24 @@ export interface Camera {
 }
 
 export interface CanvasState {
-  layers:  Layer[]
+  layers: Layer[]
   strokes: Record<string, Stroke> // id -> stroke
-  camera: Camera
-  activeLayerId: string
-  activeTool: Tool
-  activeColor: string
-  activeWidth:  number
 }
 
-export type Tool = 'pen' | 'eraser' | 'pan' | 'select'
+export type Tool = "pen" | "eraser" | "pan" | "select"
 
 export interface SelectionBox {
   x: number
   y: number
   width: number
   height: number
+}
+
+export interface UIState {
+  camera: Camera
+  activeTool: Tool
+  activeColor: string
+  activeOpacity: number
+  activeWidth: number
+  activeLayerId: string
 }
