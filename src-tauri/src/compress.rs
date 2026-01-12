@@ -7,7 +7,7 @@ const BROTLI_QUALITY: u32 = 9;
 const BROTLI_WINDOW_SIZE: u32 = 22;
 const BROTLI_BUFFER_SIZE: usize = 4096;
 
-pub const COMPRESSED_EXTENSION: &str = "fsk"; // folish sketch (filename.fsk looks cute)
+pub const PROJECT_EXTENSION: &str = "flsh"; // folish but without vowels (filename.fsk looks cute but idk)
 
 /// json -> compress -> write to a path
 pub fn compress_to_file<P: AsRef<Path>>(path: P, content: &[u8]) -> io::Result<()> {

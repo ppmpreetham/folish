@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod commands;
 mod compress;
+mod file;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -12,9 +13,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            commands::save_canvas,
-            // commands::load_canvas,
-            // commands::list_canvases,
+            file::save_canvas,
+            file::load_canvas,
+            file::list_canvases,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
