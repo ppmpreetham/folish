@@ -4,6 +4,7 @@ import { useCanvasStore } from "../../stores/canvasStore"
 export const LayersPanel: React.FC = () => {
   const layers = useCanvasStore((state) => state.doc.layers)
   const activeLayerId = useCanvasStore((state) => state.ui.activeLayerId)
+  const actions = useCanvasStore()
 
   const {
     addLayer,
@@ -71,9 +72,16 @@ export const LayersPanel: React.FC = () => {
                 type="range"
                 min="0"
                 max="100"
-                value={layer.opacity * 100}
-                onChange={(e) => setLayerOpacity(layer.id, parseInt(e.target.value) / 100)}
-                className="flex-1"
+                defaultValue={layer.opacity * 100}
+                onInput={(e) => {
+                  const val = parseInt((e.target as HTMLInputElement).value) / 100
+                  actions.setLayerOpacityTransient(layer.id, val)
+                }}
+                onChange={(e) => {
+                  const val = parseInt((e.target as HTMLInputElement).value) / 100
+                  actions.setLayerOpacity(layer.id, val)
+                }}
+                className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
               />
               <span className="text-xs text-gray-500 w-8">{Math.round(layer.opacity * 100)}%</span>
             </div>

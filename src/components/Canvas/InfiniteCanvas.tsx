@@ -6,6 +6,7 @@ import { Grid } from "./Grid"
 import { Renderer } from "./Renderer"
 import simplify from "simplify-js"
 import { getStroke } from "perfect-freehand"
+import { generateStrokePath } from "../../utils/brushEngine"
 
 export const InfiniteCanvas: React.FC = () => {
   const doc = useCanvasStore((state) => state.doc)
@@ -48,27 +49,17 @@ export const InfiniteCanvas: React.FC = () => {
     onStrokeEnd: () => {
       if (currentPointsRef.current.length < 2) return
 
-      const strokeOutline = getStroke(currentPointsRef.current, {
-        size: ui.activeWidth * 2,
-        thinning: 0.65,
-        smoothing: 0.55,
-        streamline: 0.5,
-        simulatePressure: false,
-      })
-
-      const pathData = getSvgPathFromStroke(strokeOutline)
-
-      const simplifiedPoints = simplify(
-        currentPointsRef.current.map(([x, y]) => ({ x, y })),
-        1.0,
-        true
-      )
+      // Uses the same function!
+      const pathData = generateStrokePath(currentPointsRef.current, ui.activeWidth)
 
       actions.addStroke({
         id: crypto.randomUUID(),
-
-        pathData,
-        points: simplifiedPoints,
+        pathData, // Pre-computed path for performance
+        points: simplify(
+          currentPointsRef.current.map(([x, y]) => ({ x, y })),
+          1.0,
+          true
+        ),
         pressure: currentPointsRef.current.map(([, , p]) => p),
         color: ui.activeColor,
         width: ui.activeWidth,
@@ -110,29 +101,14 @@ export const InfiniteCanvas: React.FC = () => {
         <Grid camera={ui.camera} />
         <Renderer zoom={ui.camera.zoom} />
 
-        {currentPointsRef.current.length > 1 &&
-          (() => {
-            const outline = getStroke(currentPointsRef.current, {
-              size: ui.activeWidth * 3.0,
-              thinning: 0.75,
-              smoothing: 0.52,
-              streamline: 0.5,
-              simulatePressure: false,
-              last: true,
-            })
-
-            const pathData = getSvgPathFromStroke(outline)
-
-            return (
-              <path
-                d={pathData}
-                fill={ui.activeColor}
-                stroke="none"
-                opacity={0.75}
-                className="pointer-events-none"
-              />
-            )
-          })()}
+        {currentPointsRef.current.length > 1 && (
+          <path
+            d={generateStrokePath(currentPointsRef.current, ui.activeWidth)}
+            fill={ui.activeColor}
+            opacity={0.75}
+            className="pointer-events-none"
+          />
+        )}
       </g>
     </svg>
   )

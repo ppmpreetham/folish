@@ -24,6 +24,7 @@ interface CanvasStore {
   setActiveColor: (color: string) => void
   setActiveWidth: (width: number) => void
   setActiveLayer: (id: string) => void
+  setLayerOpacityTransient: (id: string, opacity: number) => void
 
   execute: (recipe: (draft: CanvasState) => void) => void
   addStroke: (stroke: Stroke) => void
@@ -90,6 +91,14 @@ export const useCanvasStore = create<CanvasStore>()(
         setActiveWidth: (width) => set((state) => ({ ui: { ...state.ui, activeWidth: width } })),
         setActiveLayer: (id) => set((state) => ({ ui: { ...state.ui, activeLayerId: id } })),
 
+        setLayerOpacityTransient: (id: string, opacity: number) =>
+          set((state) => {
+            // Use a shallow copy to trigger a re-render without the 'execute' overhead
+            const newLayers = state.doc.layers.map((l) =>
+              l.id === id ? { ...l, opacity: Math.max(0, Math.min(1, opacity)) } : l
+            )
+            return { doc: { ...state.doc, layers: newLayers } }
+          }),
         execute: (recipe) => {
           const [nextDoc, patches, inversePatches] = produceWithPatches(get().doc, recipe)
           set((state) => ({
