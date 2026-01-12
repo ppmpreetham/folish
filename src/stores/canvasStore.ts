@@ -29,7 +29,6 @@ interface CanvasStore {
   addStroke: (stroke: Stroke) => void
   updateStrokePoints: (id: string, points: Point[]) => void
   deleteStrokes: (ids: string[]) => void
-
   addLayer: (name: string) => void
   deleteLayer: (id: string) => void
   toggleLayerVisibility: (id: string) => void
@@ -40,21 +39,13 @@ interface CanvasStore {
   redo: () => void
   canUndo: () => boolean
   canRedo: () => boolean
-
   resetCanvas: () => void
   clearHistory: () => void
 }
 
 const initialDoc: CanvasState = {
   layers: [
-    {
-      id: "layer-1",
-      name: "Layer 1",
-      visible: true,
-      locked: false,
-      opacity: 1,
-      strokeIds: [],
-    },
+    { id: "layer-1", name: "Layer 1", visible: true, locked: false, opacity: 1, strokeIds: [] },
   ],
   strokes: {},
 }
@@ -91,39 +82,16 @@ export const useCanvasStore = create<CanvasStore>()(
           return layer.strokeIds.map((id) => doc.strokes[id]).filter((s): s is Stroke => !!s)
         },
 
-        setCamera: (camera) =>
-          set((state) => ({
-            ui: { ...state.ui, camera: { ...camera } },
-          })),
-
-        setActiveTool: (tool) =>
-          set((state) => ({
-            ui: { ...state.ui, activeTool: tool },
-          })),
-
-        setActiveColor: (color) =>
-          set((state) => ({
-            ui: { ...state.ui, activeColor: color },
-          })),
-
-        setActiveOpacity: (opacity: number) =>
-          set((state) => ({
-            ui: { ...state.ui, activeOpacity: Math.max(0, Math.min(1, opacity)) },
-          })),
-
-        setActiveWidth: (width) =>
-          set((state) => ({
-            ui: { ...state.ui, activeWidth: width },
-          })),
-
-        setActiveLayer: (id) =>
-          set((state) => ({
-            ui: { ...state.ui, activeLayerId: id },
-          })),
+        setCamera: (camera) => set((state) => ({ ui: { ...state.ui, camera } })),
+        setActiveTool: (tool) => set((state) => ({ ui: { ...state.ui, activeTool: tool } })),
+        setActiveColor: (color) => set((state) => ({ ui: { ...state.ui, activeColor: color } })),
+        setActiveOpacity: (opacity) =>
+          set((state) => ({ ui: { ...state.ui, activeOpacity: opacity } })),
+        setActiveWidth: (width) => set((state) => ({ ui: { ...state.ui, activeWidth: width } })),
+        setActiveLayer: (id) => set((state) => ({ ui: { ...state.ui, activeLayerId: id } })),
 
         execute: (recipe) => {
           const [nextDoc, patches, inversePatches] = produceWithPatches(get().doc, recipe)
-
           set((state) => ({
             doc: nextDoc,
             past: [...state.past, { patches, inversePatches }].slice(-MAX_HISTORY),
@@ -131,7 +99,7 @@ export const useCanvasStore = create<CanvasStore>()(
           }))
         },
 
-        addStroke: (stroke: Stroke) =>
+        addStroke: (stroke) =>
           get().execute((draft) => {
             draft.strokes[stroke.id] = { ...stroke }
             const layer = draft.layers.find((l) => l.id === stroke.layerId)
@@ -139,12 +107,9 @@ export const useCanvasStore = create<CanvasStore>()(
           }),
 
         updateStrokePoints: (id, points) =>
-          set((state) => {
-            const stroke = state.doc.strokes[id]
-            if (stroke) {
-              stroke.points = [...points]
-            }
-            return { doc: { ...state.doc } }
+          get().execute((draft) => {
+            const stroke = draft.strokes[id]
+            if (stroke) stroke.points = [...points]
           }),
 
         deleteStrokes: (ids) => {
@@ -162,14 +127,7 @@ export const useCanvasStore = create<CanvasStore>()(
         addLayer: (name) => {
           const id = crypto.randomUUID()
           get().execute((draft) => {
-            draft.layers.push({
-              id,
-              name,
-              visible: true,
-              locked: false,
-              opacity: 1,
-              strokeIds: [],
-            })
+            draft.layers.push({ id, name, visible: true, locked: false, opacity: 1, strokeIds: [] })
           })
           get().setActiveLayer(id)
         },
@@ -178,16 +136,13 @@ export const useCanvasStore = create<CanvasStore>()(
           if (get().doc.layers.length <= 1) return
           get().execute((draft) => {
             const layer = draft.layers.find((l) => l.id === id)
-            if (layer) {
+            if (layer)
               layer.strokeIds.forEach((sid) => {
                 delete draft.strokes[sid]
               })
-            }
             draft.layers = draft.layers.filter((l) => l.id !== id)
           })
-          if (get().ui.activeLayerId === id) {
-            get().setActiveLayer(get().doc.layers[0].id)
-          }
+          if (get().ui.activeLayerId === id) get().setActiveLayer(get().doc.layers[0].id)
         },
 
         toggleLayerVisibility: (id) =>
@@ -211,54 +166,33 @@ export const useCanvasStore = create<CanvasStore>()(
         undo: () => {
           const { past, doc } = get()
           if (past.length === 0) return
-
-          const lastEntry = past[past.length - 1]
-          const newDoc = applyPatches(doc, lastEntry.inversePatches)
-
+          const entry = past[past.length - 1]
           set((state) => ({
-            doc: newDoc,
+            doc: applyPatches(doc, entry.inversePatches),
             past: state.past.slice(0, -1),
-            future: [lastEntry, ...state.future],
+            future: [entry, ...state.future],
           }))
         },
 
         redo: () => {
           const { future, doc } = get()
           if (future.length === 0) return
-
-          const nextEntry = future[0]
-          const newDoc = applyPatches(doc, nextEntry.patches)
-
+          const entry = future[0]
           set((state) => ({
-            doc: newDoc,
-            past: [...state.past, nextEntry],
+            doc: applyPatches(doc, entry.patches),
+            past: [...state.past, entry],
             future: state.future.slice(1),
           }))
         },
 
         canUndo: () => get().past.length > 0,
         canRedo: () => get().future.length > 0,
-
-        resetCanvas: () =>
-          set({
-            doc: initialDoc,
-            ui: initialUI,
-            past: [],
-            future: [],
-          }),
-
-        clearHistory: () =>
-          set({
-            past: [],
-            future: [],
-          }),
+        resetCanvas: () => set({ doc: initialDoc, ui: initialUI, past: [], future: [] }),
+        clearHistory: () => set({ past: [], future: [] }),
       }),
       {
-        name: "concepts-pro-store",
-        partialize: (state) => ({
-          doc: state.doc,
-          ui: state.ui,
-        }),
+        name: "folish-storage",
+        partialize: (state) => ({ doc: state.doc }),
         version: 1,
       }
     )
