@@ -38,7 +38,7 @@ pub fn strip_project_extension(name: &str) -> String {
         .to_string()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn save_canvas(
     app_handle: AppHandle,
     canvas: CanvasState,
@@ -55,7 +55,7 @@ pub async fn save_canvas(
     Ok(path.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn load_canvas(app_handle: AppHandle, filename: String) -> Result<CanvasState, String> {
     let dir = get_canvas_dir(&app_handle)?;
     let path = canvas_file_path(&dir, &filename);
@@ -72,7 +72,7 @@ pub async fn load_canvas(app_handle: AppHandle, filename: String) -> Result<Canv
     Ok(canvas)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn list_canvases(app_handle: AppHandle) -> Result<Vec<String>, String> {
     let dir = get_canvas_dir(&app_handle)?;
 
