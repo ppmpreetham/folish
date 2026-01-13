@@ -75,9 +75,10 @@ interface LayerSettingsProps {
   layer: Layer
   position: { top: number; left: number }
   onClose: () => void
+  onRename: () => void
 }
 
-const LayerSettings = ({ layer, position, onClose }: LayerSettingsProps) => {
+const LayerSettings = ({ layer, position, onClose, onRename }: LayerSettingsProps) => {
   const settingsRef = useRef<HTMLDivElement>(null)
 
   const setLayerOpacity = useCanvasStore((s) => s.setLayerOpacity)
@@ -108,7 +109,7 @@ const LayerSettings = ({ layer, position, onClose }: LayerSettingsProps) => {
         left: position.left,
         zIndex: 9999,
       }}
-      className="w-fit p-2 rounded-lg flex flex-col gap-2 bg-white shadow-xl border border-gray-200 animate-in fade-in zoom-in-95 duration-100 min-w-[200px]"
+      className="w-fit p-2 rounded-lg flex flex-col gap-2 bg-white border border-gray-200 animate-in fade-in zoom-in-95 duration-100 min-w-[200px]"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex flex-row gap-1 items-center justify-between">
@@ -135,10 +136,16 @@ const LayerSettings = ({ layer, position, onClose }: LayerSettingsProps) => {
             }}
           />
 
-          <TextAa onClick={() => console.log("Rename triggers inline input focus")} />
+          <TextAa
+            onClick={() => {
+              onRename()
+              onClose()
+            }}
+          />
 
           <TrashSimple
             className="hover:bg-red-50 hover:text-red-600"
+            size={20}
             onClick={() => {
               deleteLayer(layer.id)
               onClose()
@@ -189,10 +196,18 @@ const SingleLayer = ({
   onHideSettings,
 }: SingleLayerProps) => {
   const rowRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const toggleLayerVisibility = useCanvasStore((s) => s.toggleLayerVisibility)
   const renameLayer = useCanvasStore((s) => s.renameLayer)
   const setActiveLayer = useCanvasStore((s) => s.setActiveLayer)
+
+  const handleRename = () => {
+    setTimeout(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }, 10)
+  }
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -240,6 +255,7 @@ const SingleLayer = ({
 
         <div className="flex-1 min-w-0 flex flex-col justify-center h-full">
           <input
+            ref={inputRef}
             className={clsx(
               "text-sm font-medium bg-transparent border-none p-0 focus:ring-0 w-full truncate cursor-pointer",
               isActive ? "text-gray-900" : "text-gray-600"
@@ -264,6 +280,7 @@ const SingleLayer = ({
           layer={layer}
           position={showSettings as { top: number; left: number }}
           onClose={onHideSettings}
+          onRename={handleRename}
         />
       )}
     </>

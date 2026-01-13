@@ -38,7 +38,7 @@ function App() {
       <Parameters />
 
       {/* Info Overlay */}
-      <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow text-sm text-gray-600">
+      <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg text-sm text-gray-600">
         <p>
           <strong>Scroll: </strong> Zoom | <strong>Cmd+Drag:</strong> Pan | <strong>Drag:</strong>{" "}
           Draw
