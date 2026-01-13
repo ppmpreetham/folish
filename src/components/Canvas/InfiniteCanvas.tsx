@@ -5,6 +5,7 @@ import { Grid } from "./Grid"
 import { Renderer } from "./Renderer"
 import { getStroke } from "perfect-freehand"
 import { getSvgPathFromStroke, simplifyStroke } from "../../utils/brushEngine"
+import { DEFAULT_BRUSH } from "../../utils/brushConfig"
 
 export const InfiniteCanvas: React.FC = () => {
   const ui = useCanvasStore((state) => state.ui)
@@ -49,7 +50,9 @@ export const InfiniteCanvas: React.FC = () => {
     return () => {
       window.removeEventListener("resize", updateLayout)
       window.removeEventListener("scroll", updateLayout)
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      const raf = rafRef.current
+      rafRef.current = null
+      if (raf !== null) cancelAnimationFrame(raf)
     }
   }, [])
 
@@ -61,15 +64,11 @@ export const InfiniteCanvas: React.FC = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     const points = currentPointsRef.current
-    const options = {
-      size: ui.activeWidth,
-      thinning: 0.5,
-      smoothing: 0.5,
-      streamline: 0.5,
-      simulatePressure: false,
-    }
 
-    const outlinePoints = getStroke(points, options)
+    const outlinePoints = getStroke(points, {
+      ...DEFAULT_BRUSH,
+      size: ui.activeWidth,
+    })
 
     ctx.save()
     const cam = cameraRef.current
@@ -118,10 +117,7 @@ export const InfiniteCanvas: React.FC = () => {
 
       const strokeOpts = {
         size: ui.activeWidth,
-        thinning: 0.5,
-        smoothing: 0.5,
-        streamline: 0.5,
-        simulatePressure: false,
+        ...DEFAULT_BRUSH,
       }
 
       const outline = getStroke(finalPoints, strokeOpts)

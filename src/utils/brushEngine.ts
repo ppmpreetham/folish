@@ -1,4 +1,3 @@
-import { getStroke } from "perfect-freehand"
 import { Point } from "../types"
 
 export function getSvgPathFromStroke(stroke: number[][]): string {
