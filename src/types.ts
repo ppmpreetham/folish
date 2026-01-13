@@ -1,13 +1,13 @@
 export interface Point {
   x: number
   y: number
+  pressure: number
 }
 
 export interface Stroke {
   id: string
   points: Point[]
   pathData?: string
-  pressure: number[]
   layerId: string
   color: string
   width: number
@@ -29,6 +29,7 @@ export interface Camera {
   x: number
   y: number
   zoom: number
+  rotation: number
 }
 
 export interface CanvasState {
@@ -52,4 +53,10 @@ export interface UIState {
   activeOpacity: number
   activeWidth: number
   activeLayerId: string
+}
+
+export interface SimpleUIState {
+  showLayersPanel: boolean
+  showPrecisionPanel: boolean
+  showParameters: boolean
 }

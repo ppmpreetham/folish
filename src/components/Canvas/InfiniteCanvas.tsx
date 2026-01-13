@@ -1,66 +1,136 @@
-import React, { useRef, useEffect, useReducer } from "react"
+import React, { useRef, useEffect, useCallback } from "react"
 import { useCanvasStore } from "../../stores/canvasStore"
 import { useCanvasEvents } from "../../hooks/useCanvasEvents"
-import { Point, Camera } from "../../types"
 import { Grid } from "./Grid"
 import { Renderer } from "./Renderer"
-import simplify from "simplify-js"
 import { getStroke } from "perfect-freehand"
-import { generateStrokePath } from "../../utils/brushEngine"
+import { getSvgPathFromStroke, simplifyStroke } from "../../utils/brushEngine"
 
 export const InfiniteCanvas: React.FC = () => {
-  const doc = useCanvasStore((state) => state.doc)
   const ui = useCanvasStore((state) => state.ui)
-  const actions = useCanvasStore()
-
-  const containerRef = useRef<SVGSVGElement>(null)
+  const addStroke = useCanvasStore((s) => s.addStroke)
+  const setCamera = useCanvasStore((s) => s.setCamera)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const rectRef = useRef<DOMRect | null>(null)
-  const cameraRef = useRef<Camera>(ui.camera)
 
-  const currentPointsRef = useRef<Array<[number, number, number]>>([])
-  const [, forceUpdate] = useReducer((x) => x + 1, 0)
+  const rafRef = useRef<number | null>(null)
+
+  const currentPointsRef = useRef<Array<{ x: number; y: number; pressure: number }>>([])
+  const cameraRef = useRef(ui.camera)
 
   useEffect(() => {
     cameraRef.current = ui.camera
   }, [ui.camera])
 
   useEffect(() => {
-    const updateRect = () => {
-      if (containerRef.current) {
-        rectRef.current = containerRef.current.getBoundingClientRect()
+    if (!containerRef.current || !overlayCanvasRef.current) return
+    const canvas = overlayCanvasRef.current
+    const parent = containerRef.current
+
+    const updateLayout = () => {
+      rectRef.current = parent.getBoundingClientRect()
+      const dpr = window.devicePixelRatio || 1
+
+      canvas.width = rectRef.current.width * dpr
+      canvas.height = rectRef.current.height * dpr
+      canvas.style.width = `${rectRef.current.width}px`
+      canvas.style.height = `${rectRef.current.height}px`
+
+      const ctx = canvas.getContext("2d")
+      if (ctx) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       }
     }
-    updateRect()
-    window.addEventListener("resize", updateRect)
-    return () => window.removeEventListener("resize", updateRect)
+
+    updateLayout()
+    window.addEventListener("resize", updateLayout)
+    window.addEventListener("scroll", updateLayout)
+    return () => {
+      window.removeEventListener("resize", updateLayout)
+      window.removeEventListener("scroll", updateLayout)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
   }, [])
+
+  const renderLiveStroke = useCallback(() => {
+    const canvas = overlayCanvasRef.current
+    const ctx = canvas?.getContext("2d")
+    if (!canvas || !ctx || currentPointsRef.current.length < 2) return
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    const points = currentPointsRef.current
+    const options = {
+      size: ui.activeWidth,
+      thinning: 0.5,
+      smoothing: 0.5,
+      streamline: 0.5,
+      simulatePressure: false,
+    }
+
+    const outlinePoints = getStroke(points, options)
+
+    ctx.save()
+    const cam = cameraRef.current
+    ctx.translate(cam.x, cam.y)
+    ctx.scale(cam.zoom, cam.zoom)
+
+    ctx.beginPath()
+    if (outlinePoints.length > 0) {
+      ctx.moveTo(outlinePoints[0][0], outlinePoints[0][1])
+      for (let i = 1; i < outlinePoints.length; i++) {
+        ctx.lineTo(outlinePoints[i][0], outlinePoints[i][1])
+      }
+    }
+    ctx.closePath()
+    ctx.fillStyle = ui.activeColor
+    ctx.fill()
+    ctx.restore()
+  }, [ui.activeWidth, ui.activeColor])
 
   const { handlePointerDown, handlePointerMove, handlePointerUp, handleWheel } = useCanvasEvents({
     cameraRef,
     rectRef,
     activeTool: ui.activeTool,
+
     onStrokeStart: (p) => {
-      currentPointsRef.current = [[p.x, p.y, p.pressure]]
+      currentPointsRef.current = [{ x: p.x, y: p.y, pressure: p.pressure }]
     },
+
     onStrokeMove: (p) => {
-      currentPointsRef.current.push([p.x, p.y, p.pressure])
-      forceUpdate()
+      currentPointsRef.current.push({ x: p.x, y: p.y, pressure: p.pressure })
+
+      if (!rafRef.current) {
+        rafRef.current = requestAnimationFrame(() => {
+          renderLiveStroke()
+          rafRef.current = null
+        })
+      }
     },
+
     onStrokeEnd: () => {
       if (currentPointsRef.current.length < 2) return
 
-      // Uses the same function!
-      const pathData = generateStrokePath(currentPointsRef.current, ui.activeWidth)
+      const rawPoints = currentPointsRef.current
 
-      actions.addStroke({
+      const finalPoints = simplifyStroke(rawPoints, 0.5 / cameraRef.current.zoom)
+
+      const strokeOpts = {
+        size: ui.activeWidth,
+        thinning: 0.5,
+        smoothing: 0.5,
+        streamline: 0.5,
+        simulatePressure: false,
+      }
+
+      const outline = getStroke(finalPoints, strokeOpts)
+      const pathData = getSvgPathFromStroke(outline)
+
+      addStroke({
         id: crypto.randomUUID(),
-        pathData, // Pre-computed path for performance
-        points: simplify(
-          currentPointsRef.current.map(([x, y]) => ({ x, y })),
-          1.0,
-          true
-        ),
-        pressure: currentPointsRef.current.map(([, , p]) => p),
+        pathData,
+        points: finalPoints,
         color: ui.activeColor,
         width: ui.activeWidth,
         opacity: ui.activeOpacity,
@@ -70,17 +140,25 @@ export const InfiniteCanvas: React.FC = () => {
       })
 
       currentPointsRef.current = []
-      forceUpdate()
+
+      const ctx = overlayCanvasRef.current?.getContext("2d")
+      if (ctx) ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
     },
+
     onPanMove: (dx, dy) => {
-      actions.setCamera({
+      setCamera({
         ...cameraRef.current,
         x: cameraRef.current.x + dx,
         y: cameraRef.current.y + dy,
       })
     },
     onZoom: (newCamera) => {
-      actions.setCamera(newCamera)
+      setCamera(newCamera)
     },
   })
 
@@ -88,49 +166,25 @@ export const InfiniteCanvas: React.FC = () => {
     ui.activeTool === "pan" ? "cursor-grab active:cursor-grabbing" : "cursor-crosshair"
 
   return (
-    <svg
+    <div
       ref={containerRef}
-      className={`w-full h-full bg-slate-50 overflow-hidden touch-none select-none ${cursorClass}`}
+      className={`relative w-full h-full bg-slate-50 overflow-hidden touch-none select-none ${cursorClass}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <g transform={`translate(${ui.camera.x}, ${ui.camera.y}) scale(${ui.camera.zoom})`}>
-        <Grid camera={ui.camera} />
-        <Renderer zoom={ui.camera.zoom} />
-
-        {currentPointsRef.current.length > 1 && (
-          <path
-            d={generateStrokePath(currentPointsRef.current, ui.activeWidth)}
-            fill={ui.activeColor}
-            opacity={0.75}
-            className="pointer-events-none"
-          />
-        )}
-      </g>
-    </svg>
+      <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
+        <g transform={`translate(${ui.camera.x}, ${ui.camera.y}) scale(${ui.camera.zoom})`}>
+          <Grid camera={ui.camera} />
+          <Renderer />
+        </g>
+      </svg>
+      <canvas
+        ref={overlayCanvasRef}
+        className="absolute top-0 left-0 w-full h-full pointer-events-none"
+      />
+    </div>
   )
-}
-
-export function getSvgPathFromStroke(points: number[][]): string {
-  if (points.length < 4) return ""
-
-  const d: string[] = []
-
-  d.push(`M${points[0][0].toFixed(2)},${points[0][1].toFixed(2)}`)
-
-  for (let i = 1; i < points.length; i++) {
-    const midX = (points[i][0] + points[i - 1][0]) / 2
-    const midY = (points[i][1] + points[i - 1][1]) / 2
-    d.push(
-      `Q${points[i - 1][0].toFixed(2)},${points[i - 1][1].toFixed(2)} ` +
-        `${midX.toFixed(2)},${midY.toFixed(2)}`
-    )
-  }
-
-  d.push("Z")
-
-  return d.join(" ")
 }

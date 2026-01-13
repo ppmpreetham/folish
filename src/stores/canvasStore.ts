@@ -52,7 +52,7 @@ const initialDoc: CanvasState = {
 }
 
 const initialUI: UIState = {
-  camera: { x: 0, y: 0, zoom: 1 },
+  camera: { x: 0, y: 0, zoom: 1, rotation: 0 },
   activeTool: "pen",
   activeColor: "#000000",
   activeWidth: 2,
@@ -93,7 +93,6 @@ export const useCanvasStore = create<CanvasStore>()(
 
         setLayerOpacityTransient: (id: string, opacity: number) =>
           set((state) => {
-            // Use a shallow copy to trigger a re-render without the 'execute' overhead
             const newLayers = state.doc.layers.map((l) =>
               l.id === id ? { ...l, opacity: Math.max(0, Math.min(1, opacity)) } : l
             )
