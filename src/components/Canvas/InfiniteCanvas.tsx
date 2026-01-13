@@ -7,6 +7,10 @@ import { getStroke } from "perfect-freehand"
 import { getSvgPathFromStroke } from "../../utils/brushEngine"
 import { DEFAULT_BRUSH } from "../../utils/brushConfig"
 
+const V_MAX = 12 // responsive velocity
+const ALPHA_MIN = 0.15 // slow precision drawing
+const ALPHA_MAX = 0.85 // fast freedom
+
 export const InfiniteCanvas: React.FC = () => {
   const ui = useCanvasStore((state) => state.ui)
   const addStroke = useCanvasStore((s) => s.addStroke)
@@ -14,11 +18,12 @@ export const InfiniteCanvas: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const rectRef = useRef<DOMRect | null>(null)
-
   const rafRef = useRef<number | null>(null)
 
   const currentPointsRef = useRef<Array<{ x: number; y: number; pressure: number }>>([])
   const cameraRef = useRef(ui.camera)
+
+  const lastStablePointRef = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     cameraRef.current = ui.camera
@@ -95,25 +100,53 @@ export const InfiniteCanvas: React.FC = () => {
 
     onStrokeStart: (p) => {
       currentPointsRef.current = [{ x: p.x, y: p.y, pressure: p.pressure }]
+      lastStablePointRef.current = { x: p.x, y: p.y }
     },
 
     onStrokeMove: (p) => {
       const points = currentPointsRef.current
       const lastPoint = points[points.length - 1]
+      const lastStable = lastStablePointRef.current
 
       if (lastPoint) {
         const dx = p.x - lastPoint.x
         const dy = p.y - lastPoint.y
 
         const dist = Math.hypot(dx, dy)
-        const speed = Math.hypot(dx, dy)
+        const speed = dist
+
         const base = 0.75 / cameraRef.current.zoom
         const threshold = Math.max(base, speed * 0.25)
 
         if (dist < threshold) return
       }
 
-      currentPointsRef.current.push({ x: p.x, y: p.y, pressure: p.pressure })
+      if (!lastStable) {
+        currentPointsRef.current.push({
+          x: p.x,
+          y: p.y,
+          pressure: p.pressure,
+        })
+        lastStablePointRef.current = { x: p.x, y: p.y }
+      } else {
+        const dx = p.x - lastStable.x
+        const dy = p.y - lastStable.y
+        const dist = Math.hypot(dx, dy)
+        const speed = dist
+
+        const alpha = Math.min(ALPHA_MAX, Math.max(ALPHA_MIN, speed / V_MAX))
+
+        const sx = lastStable.x + (p.x - lastStable.x) * alpha
+        const sy = lastStable.y + (p.y - lastStable.y) * alpha
+
+        lastStablePointRef.current = { x: sx, y: sy }
+
+        currentPointsRef.current.push({
+          x: sx,
+          y: sy,
+          pressure: p.pressure,
+        })
+      }
 
       if (!rafRef.current) {
         rafRef.current = requestAnimationFrame(() => {
@@ -149,6 +182,7 @@ export const InfiniteCanvas: React.FC = () => {
       })
 
       currentPointsRef.current = []
+      lastStablePointRef.current = null
 
       const ctx = overlayCanvasRef.current?.getContext("2d")
       if (ctx) ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
