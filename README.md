@@ -10,7 +10,7 @@
 
 ---
 
-###hat is Folish?
+### What is Folish?
 
 Folish is a **framework-agnostic** digital sketchbook inspired by _Concepts_. It combines the performance of **Rust** with the flexibility of **React** to create a buttery-smooth drawing experience.
 
@@ -30,16 +30,9 @@ pnpm install
 
 # 3. Run in development mode
 pnpm tauri dev
-
 ```
 
-> [!TIP] > **Building for Production:**
-> To create a standalone executable for your OS, run:
->
-> ```bash
-> pnpm tauri build
->
-> ```
+> [!TIP] > **Building for Production:**: To create a standalone executable for your OS, run `pnpm tauri build`
 
 ---
 
@@ -123,7 +116,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-###ecommended IDE Setup
+### Recommended IDE Setup
 
 - [VS Code](https://code.visualstudio.com/)
 - [Tauri Extension](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode)
@@ -139,3 +132,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 - [perfect-freehand](https://github.com/steveruizok/perfect-freehand) for the stroke algorithm.
 - [Concepts](https://concepts.app/) for the UI/UX inspiration.
+
+```
+
+```
