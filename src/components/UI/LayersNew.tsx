@@ -1,5 +1,5 @@
 import clsx from "clsx"
-import { useEffect, useRef } from "react"
+import { ReactNode, useEffect, useRef } from "react"
 
 import {
   IconContext,
@@ -121,8 +121,12 @@ const SingleLayer = ({
         aria-label={visible ? "Hide layer" : "Show layer"}
       >
         {/* Vertical line from the center */}
-        <span className="absolute left-1/2 top-1/2 w-0.5 h-4 bg-gray-400 -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
-        {visible ? <Eye weight="regular" size={24} /> : <EyeSlash weight="regular" size={24} />}
+        {visible ? (
+          <Eye weight="regular" size={24} className="z-0" />
+        ) : (
+          <EyeSlash weight="regular" size={24} />
+        )}
+        <div className="absolute left-1/2 top-1/2 w-0.5 h-4 bg-gray-400 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-1" />
       </button>
       <button
         className="hover:bg-gray-300 flex flex-row gap-2 items-center justify-center pr-2 relative"
@@ -147,6 +151,15 @@ const SingleLayer = ({
   )
 }
 
+const LayerButton = ({ name, icon }: { name: string; icon: ReactNode }) => {
+  return (
+    <button className="flex flex-row gap-2 items-center justify-center w-fit">
+      {icon}
+      <div className="text-sm font-semibold">{name}</div>
+    </button>
+  )
+}
+
 const LayersNew = () => {
   const [autoSort, setAutoSort] = useState<boolean>(true)
   const [openSettingsIndex, setOpenSettingsIndex] = useState<number | null>(null)
@@ -158,15 +171,20 @@ const LayersNew = () => {
 
   return (
     <div>
-      <button className="flex flex-row gap-2 items-center justify-center w-fit">
+      <button className="flex flex-row gap-2 items-center justify-center w-fit p-2 hover:bg-blue-100 rounded-md">
         <Stack weight="regular" size={24} />
         <div className="text-sm font-semibold">Layers</div>
       </button>
-      <button className="flex flex-row gap-2 items-center justify-center w-fit">
+      <button
+        className="flex flex-row gap-2 items-center justify-center w-fit p-2 hover:bg-blue-100 rounded-md"
+        onClick={() => {
+          setAutoSort(!autoSort)
+        }}
+      >
         <ArrowsDownUp weight="regular" size={24} />
         <div className="text-sm font-semibold">Sorting | {autoSort ? "Automatic" : "Manual"}</div>
       </button>
-      <button className="flex flex-row gap-2 items-center justify-center w-fit">
+      <button className="flex flex-row gap-2 items-center justify-center w-fit p-2 hover:bg-blue-100 rounded-md">
         <Plus weight="regular" size={24} />
         <div className="text-sm font-semibold">New Layer</div>
       </button>

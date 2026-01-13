@@ -5,6 +5,7 @@ import { LayersPanel } from "./components/UI/Layers"
 import { useCanvasStore } from "./stores/canvasStore"
 import ColorPicker from "./components/UI/ColorPicker"
 import LayersNew from "./components/UI/LayersNew"
+import Parameters from "./components/UI/Parameters"
 
 function App() {
   const undo = useCanvasStore((state) => state.undo)
@@ -32,8 +33,9 @@ function App() {
       {/* <InfiniteCanvas />
       <Toolbar />
       <LayersPanel /> */}
-      <ColorPicker />
+      {/* <ColorPicker /> */}
       {/* <LayersNew /> */}
+      <Parameters />
 
       {/* Info Overlay */}
       <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow text-sm text-gray-600">
