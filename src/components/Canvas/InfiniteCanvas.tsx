@@ -15,6 +15,8 @@ export const InfiniteCanvas: React.FC = () => {
   const ui = useCanvasStore((state) => state.ui)
   const addStroke = useCanvasStore((s) => s.addStroke)
   const setCamera = useCanvasStore((s) => s.setCamera)
+  const currentInputTypeRef = useRef<string>("mouse")
+
   const containerRef = useRef<HTMLDivElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const rectRef = useRef<DOMRect | null>(null)
@@ -69,10 +71,12 @@ export const InfiniteCanvas: React.FC = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     const points = currentPointsRef.current
+    const isPen = currentInputTypeRef.current === "pen"
 
     const outlinePoints = getStroke(points, {
       ...DEFAULT_BRUSH,
       size: ui.activeWidth,
+      simulatePressure: !isPen,
     })
 
     ctx.save()
@@ -99,6 +103,7 @@ export const InfiniteCanvas: React.FC = () => {
     activeTool: ui.activeTool,
 
     onStrokeStart: (p) => {
+      currentInputTypeRef.current = p.pointerType
       currentPointsRef.current = [{ x: p.x, y: p.y, pressure: p.pressure }]
       lastStablePointRef.current = { x: p.x, y: p.y }
     },
@@ -120,12 +125,12 @@ export const InfiniteCanvas: React.FC = () => {
 
         if (dist < threshold) return
       }
-
+      const newPressure = p.pointerType === "pen" ? p.pressure : 0.5
       if (!lastStable) {
         currentPointsRef.current.push({
           x: p.x,
           y: p.y,
-          pressure: p.pressure,
+          pressure: newPressure,
         })
         lastStablePointRef.current = { x: p.x, y: p.y }
       } else {
@@ -134,7 +139,8 @@ export const InfiniteCanvas: React.FC = () => {
         const dist = Math.hypot(dx, dy)
         const speed = dist
 
-        const alpha = Math.min(ALPHA_MAX, Math.max(ALPHA_MIN, speed / V_MAX))
+        const zoomFactor = Math.sqrt(cameraRef.current.zoom)
+        const alpha = Math.min(ALPHA_MAX, Math.max(ALPHA_MIN, (speed * zoomFactor) / V_MAX))
 
         const sx = lastStable.x + (p.x - lastStable.x) * alpha
         const sy = lastStable.y + (p.y - lastStable.y) * alpha
@@ -144,7 +150,7 @@ export const InfiniteCanvas: React.FC = () => {
         currentPointsRef.current.push({
           x: sx,
           y: sy,
-          pressure: p.pressure,
+          pressure: newPressure,
         })
       }
 
@@ -160,10 +166,12 @@ export const InfiniteCanvas: React.FC = () => {
       if (currentPointsRef.current.length < 2) return
 
       const rawPoints = currentPointsRef.current
+      const isPen = currentInputTypeRef.current === "pen"
 
       const strokeOpts = {
         size: ui.activeWidth,
         ...DEFAULT_BRUSH,
+        simulatePressure: !isPen,
       }
 
       const outline = getStroke(rawPoints, strokeOpts)

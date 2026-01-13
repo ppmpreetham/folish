@@ -1,13 +1,13 @@
-import { useCallback, useRef, useEffect } from "react"
+import { useCallback, useRef } from "react"
 import { Point, Tool, Camera } from "../types"
 import { useCanvasMath } from "./useCanvasMath"
 
 interface UseCanvasEventsProps {
-  cameraRef: React.MutableRefObject<Camera>
-  rectRef: React.MutableRefObject<DOMRect | null>
+  cameraRef: React.RefObject<Camera>
+  rectRef: React.RefObject<DOMRect | null>
   activeTool: Tool
-  onStrokeStart: (point: Point & { pressure: number }) => void
-  onStrokeMove: (point: Point & { pressure: number }) => void
+  onStrokeStart: (point: Point & { pressure: number; pointerType: string }) => void
+  onStrokeMove: (point: Point & { pressure: number; pointerType: string }) => void
   onStrokeEnd: () => void
   onPanMove: (dx: number, dy: number) => void
   onZoom: (camera: Camera) => void
@@ -31,7 +31,11 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
         isPanningRef.current = true
       } else if (props.activeTool === "pen" || props.activeTool === "eraser") {
         isDrawingRef.current = true
-        props.onStrokeStart({ ...toWorld(e.clientX, e.clientY), pressure: e.pressure })
+        props.onStrokeStart({
+          ...toWorld(e.clientX, e.clientY),
+          pressure: e.pressure,
+          pointerType: e.pointerType,
+        })
       }
     },
     [props.activeTool, toWorld, props.onStrokeStart]
@@ -39,7 +43,6 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      // e.preventDefault()
       const isTrackpad = Math.max(Math.abs(e.deltaX), Math.abs(e.deltaY)) < 50
 
       if (isTrackpad && !e.ctrlKey) {
@@ -62,6 +65,7 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
       const x = e.clientX
       const y = e.clientY
       const pressure = e.pressure
+      const pointerType = e.pointerType
 
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = undefined
@@ -72,7 +76,11 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
           lastPosRef.current = { x, y }
           props.onPanMove(dx, dy)
         } else if (isDrawingRef.current) {
-          props.onStrokeMove({ ...toWorld(x, y), pressure })
+          props.onStrokeMove({
+            ...toWorld(x, y),
+            pressure,
+            pointerType,
+          })
         }
       })
     },
