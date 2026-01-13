@@ -4,7 +4,7 @@ import { useCanvasEvents } from "../../hooks/useCanvasEvents"
 import { Grid } from "./Grid"
 import { Renderer } from "./Renderer"
 import { getStroke } from "perfect-freehand"
-import { getSvgPathFromStroke, simplifyStroke } from "../../utils/brushEngine"
+import { getSvgPathFromStroke } from "../../utils/brushEngine"
 import { DEFAULT_BRUSH } from "../../utils/brushConfig"
 
 export const InfiniteCanvas: React.FC = () => {
@@ -98,6 +98,21 @@ export const InfiniteCanvas: React.FC = () => {
     },
 
     onStrokeMove: (p) => {
+      const points = currentPointsRef.current
+      const lastPoint = points[points.length - 1]
+
+      if (lastPoint) {
+        const dx = p.x - lastPoint.x
+        const dy = p.y - lastPoint.y
+
+        const dist = Math.hypot(dx, dy)
+        const speed = Math.hypot(dx, dy)
+        const base = 0.75 / cameraRef.current.zoom
+        const threshold = Math.max(base, speed * 0.25)
+
+        if (dist < threshold) return
+      }
+
       currentPointsRef.current.push({ x: p.x, y: p.y, pressure: p.pressure })
 
       if (!rafRef.current) {
@@ -113,20 +128,18 @@ export const InfiniteCanvas: React.FC = () => {
 
       const rawPoints = currentPointsRef.current
 
-      const finalPoints = simplifyStroke(rawPoints, 0.5 / cameraRef.current.zoom)
-
       const strokeOpts = {
         size: ui.activeWidth,
         ...DEFAULT_BRUSH,
       }
 
-      const outline = getStroke(finalPoints, strokeOpts)
+      const outline = getStroke(rawPoints, strokeOpts)
       const pathData = getSvgPathFromStroke(outline)
 
       addStroke({
         id: crypto.randomUUID(),
         pathData,
-        points: finalPoints,
+        points: rawPoints,
         color: ui.activeColor,
         width: ui.activeWidth,
         opacity: ui.activeOpacity,
