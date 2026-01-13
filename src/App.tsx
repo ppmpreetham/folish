@@ -6,6 +6,7 @@ import { useCanvasStore } from "./stores/canvasStore"
 import ColorPicker from "./components/UI/ColorPicker"
 import LayersNew from "./components/UI/LayersNew"
 import Parameters from "./components/UI/Parameters"
+import MenuBar from "./components/UI/Parameters/MenuBar"
 
 function App() {
   const undo = useCanvasStore((state) => state.undo)
