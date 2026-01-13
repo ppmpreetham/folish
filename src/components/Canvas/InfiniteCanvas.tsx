@@ -10,6 +10,9 @@ import { DEFAULT_BRUSH } from "../../utils/brushConfig"
 const V_MAX = 12 // responsive velocity
 const ALPHA_MIN = 0.15 // slow precision drawing
 const ALPHA_MAX = 0.85 // fast freedom
+const V_MAX = 12
+const ALPHA_MIN = 0.15
+const ALPHA_MAX = 0.85
 
 export const InfiniteCanvas: React.FC = () => {
   const ui = useCanvasStore((state) => state.ui)
@@ -24,7 +27,6 @@ export const InfiniteCanvas: React.FC = () => {
 
   const currentPointsRef = useRef<Array<{ x: number; y: number; pressure: number }>>([])
   const cameraRef = useRef(ui.camera)
-
   const lastStablePointRef = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
@@ -37,28 +39,32 @@ export const InfiniteCanvas: React.FC = () => {
     const parent = containerRef.current
 
     const updateLayout = () => {
-      rectRef.current = parent.getBoundingClientRect()
+      const rect = parent.getBoundingClientRect()
+      rectRef.current = rect
       const dpr = window.devicePixelRatio || 1
 
-      canvas.width = rectRef.current.width * dpr
-      canvas.height = rectRef.current.height * dpr
-      canvas.style.width = `${rectRef.current.width}px`
-      canvas.style.height = `${rectRef.current.height}px`
+      canvas.width = rect.width * dpr
+      canvas.height = rect.height * dpr
+
+      canvas.style.width = `${rect.width}px`
+      canvas.style.height = `${rect.height}px`
 
       const ctx = canvas.getContext("2d")
       if (ctx) {
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.scale(dpr, dpr)
       }
     }
 
+    const observer = new ResizeObserver(updateLayout)
+    observer.observe(parent)
     updateLayout()
-    window.addEventListener("resize", updateLayout)
+
     window.addEventListener("scroll", updateLayout)
     return () => {
-      window.removeEventListener("resize", updateLayout)
+      observer.disconnect()
       window.removeEventListener("scroll", updateLayout)
       const raf = rafRef.current
-      rafRef.current = null
       if (raf !== null) cancelAnimationFrame(raf)
     }
   }, [])
@@ -216,15 +222,9 @@ export const InfiniteCanvas: React.FC = () => {
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
-    }
-
+    const onWheel = (e: WheelEvent) => e.preventDefault()
     el.addEventListener("wheel", onWheel, { passive: false })
-    return () => {
-      el.removeEventListener("wheel", onWheel)
-    }
+    return () => el.removeEventListener("wheel", onWheel)
   }, [])
 
   const cursorClass =
@@ -240,7 +240,10 @@ export const InfiniteCanvas: React.FC = () => {
       onWheel={handleWheel}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
+      <svg
+        className="absolute top-0 left-0 w-full h-full pointer-events-none"
+        shapeRendering="geometricPrecision"
+      >
         <g transform={`translate(${ui.camera.x}, ${ui.camera.y}) scale(${ui.camera.zoom})`}>
           <Grid camera={ui.camera} />
           <Renderer />
