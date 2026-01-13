@@ -1,17 +1,21 @@
-import { useCallback } from "react"
-import { Camera, Point } from "../types"
+import { RefObject, useCallback } from "react"
+import { Camera } from "../types"
+
+const MIN_ZOOM = 0.1
+const MAX_ZOOM = 50
+const ZOOM_SENSITIVITY = 0.0015
 
 interface UseCanvasMathProps {
-  cameraRef: React.MutableRefObject<Camera>
-  rectRef: React.MutableRefObject<DOMRect | null>
+  cameraRef: RefObject<Camera>
+  rectRef: RefObject<DOMRect | null>
 }
 
 export const useCanvasMath = ({ cameraRef, rectRef }: UseCanvasMathProps) => {
   const toWorld = useCallback(
-    (screenX: number, screenY: number): Point => {
+    (screenX: number, screenY: number): { x: number; y: number } => {
       const cam = cameraRef.current
       const rect = rectRef.current
-      if (!rect) return { x: 0, y: 0 }
+      if (!rect || !cam) return { x: 0, y: 0 }
 
       return {
         x: (screenX - rect.left - cam.x) / cam.zoom,
@@ -22,10 +26,10 @@ export const useCanvasMath = ({ cameraRef, rectRef }: UseCanvasMathProps) => {
   )
 
   const toScreen = useCallback(
-    (worldX: number, worldY: number): Point => {
+    (worldX: number, worldY: number): { x: number; y: number } => {
       const cam = cameraRef.current
       const rect = rectRef.current
-      if (!rect) return { x: 0, y: 0 }
+      if (!rect || !cam) return { x: 0, y: 0 }
 
       return {
         x: worldX * cam.zoom + cam.x + rect.left,
@@ -39,18 +43,20 @@ export const useCanvasMath = ({ cameraRef, rectRef }: UseCanvasMathProps) => {
     (deltaY: number, mouseX: number, mouseY: number): Camera => {
       const cam = cameraRef.current
       const rect = rectRef.current
-      if (!rect) return cam
 
-      const scaleFactor = deltaY > 0 ? 0.9 : 1.1
-      const newZoom = Math.min(Math.max(cam.zoom * scaleFactor, 0.05), 50)
+      if (!rect || !cam) return { x: 0, y: 0, zoom: 1, rotation: 0 }
 
       const worldX = (mouseX - rect.left - cam.x) / cam.zoom
       const worldY = (mouseY - rect.top - cam.y) / cam.zoom
+
+      const zoomDelta = -deltaY * ZOOM_SENSITIVITY
+      const newZoom = Math.min(Math.max(cam.zoom * Math.exp(zoomDelta), MIN_ZOOM), MAX_ZOOM)
 
       return {
         zoom: newZoom,
         x: mouseX - rect.left - worldX * newZoom,
         y: mouseY - rect.top - worldY * newZoom,
+        rotation: cam.rotation,
       }
     },
     [cameraRef, rectRef]
