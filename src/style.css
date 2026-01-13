@@ -4,3 +4,12 @@ polyline[pressure-aware] {
   stroke: url(#pressure-gradient);
   stroke-width: var(--max-width);
 }
+
+@theme inline {
+  --color-dark-bg: #0a0a0a;
+  --color-dark-text: #fff;
+  --color-dark-secondary: #0d0d0d;
+  --color-dark-tertiary: #1a1a1a;
+  --color-settings-hover: #1a1a1a;
+  --color-settings-back: #0a0a0a;
+}
