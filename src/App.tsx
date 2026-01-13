@@ -3,6 +3,8 @@ import { InfiniteCanvas } from "./components/Canvas/InfiniteCanvas"
 import { Toolbar } from "./components/UI/ToolBar"
 import { LayersPanel } from "./components/UI/Layers"
 import { useCanvasStore } from "./stores/canvasStore"
+import ColorPicker from "./components/UI/ColorPicker"
+import LayersNew from "./components/UI/LayersNew"
 
 function App() {
   const undo = useCanvasStore((state) => state.undo)
@@ -27,9 +29,11 @@ function App() {
 
   return (
     <div className="w-screen h-screen bg-slate-50 overflow-hidden relative">
-      <InfiniteCanvas />
+      {/* <InfiniteCanvas />
       <Toolbar />
-      <LayersPanel />
+      <LayersPanel /> */}
+      {/* <ColorPicker /> */}
+      <LayersNew />
 
       {/* Info Overlay */}
       <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow text-sm text-gray-600">
