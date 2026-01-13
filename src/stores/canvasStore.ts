@@ -30,11 +30,14 @@ interface CanvasStore {
   addStroke: (stroke: Stroke) => void
   updateStrokePoints: (id: string, points: Point[]) => void
   deleteStrokes: (ids: string[]) => void
+
   addLayer: (name: string) => void
   deleteLayer: (id: string) => void
   toggleLayerVisibility: (id: string) => void
   setLayerOpacity: (id: string, opacity: number) => void
   renameLayer: (id: string, name: string) => void
+  toggleLayerLock: (id: string) => void
+  duplicateLayer: (id: string) => void
 
   undo: () => void
   redo: () => void
@@ -169,6 +172,45 @@ export const useCanvasStore = create<CanvasStore>()(
           get().execute((draft) => {
             const layer = draft.layers.find((l) => l.id === id)
             if (layer) layer.name = name.trim() || "Layer"
+          }),
+
+        toggleLayerLock: (id) =>
+          get().execute((draft) => {
+            const layer = draft.layers.find((l) => l.id === id)
+            if (layer) layer.locked = !layer.locked
+          }),
+
+        duplicateLayer: (id) =>
+          get().execute((draft) => {
+            const index = draft.layers.findIndex((l) => l.id === id)
+            if (index === -1) return
+
+            const sourceLayer = draft.layers[index]
+            const newLayerId = crypto.randomUUID()
+            const newStrokeIds: string[] = []
+
+            sourceLayer.strokeIds.forEach((strokeId) => {
+              const sourceStroke = draft.strokes[strokeId]
+              if (sourceStroke) {
+                const newStrokeId = crypto.randomUUID()
+
+                draft.strokes[newStrokeId] = {
+                  ...sourceStroke,
+                  id: newStrokeId,
+                  layerId: newLayerId,
+                }
+                newStrokeIds.push(newStrokeId)
+              }
+            })
+
+            const newLayer: Layer = {
+              ...sourceLayer,
+              id: newLayerId,
+              name: `${sourceLayer.name} (Copy)`,
+              strokeIds: newStrokeIds,
+            }
+
+            draft.layers.splice(index + 1, 0, newLayer)
           }),
 
         undo: () => {

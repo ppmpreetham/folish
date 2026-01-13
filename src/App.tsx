@@ -1,7 +1,6 @@
 import { useEffect } from "react"
 import { InfiniteCanvas } from "./components/Canvas/InfiniteCanvas"
 import { Toolbar } from "./components/UI/ToolBar"
-import { LayersPanel } from "./components/UI/Layers"
 import { useCanvasStore } from "./stores/canvasStore"
 import ColorPicker from "./components/UI/ColorPicker"
 import LayersNew from "./components/UI/LayersNew"
@@ -33,7 +32,6 @@ function App() {
     <div className="w-screen h-screen bg-slate-50 overflow-hidden relative">
       <InfiniteCanvas />
       {/* <Toolbar /> */}
-      <LayersPanel />
       {/* <ColorPicker /> */}
       <LayersNew />
       <MenuBar />
