@@ -170,7 +170,7 @@ const LayersNew = () => {
   ]
 
   return (
-    <div>
+    <div className="fixed bottom-0 left-0 h-fit w-fit">
       <button className="flex flex-row gap-2 items-center justify-center w-fit p-2 hover:bg-blue-100 rounded-md">
         <Stack weight="regular" size={24} />
         <div className="text-sm font-semibold">Layers</div>

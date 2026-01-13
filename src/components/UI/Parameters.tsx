@@ -2,30 +2,76 @@ import { DownloadSimple, UploadSimple, GearSix, Info, IconContext } from "phosph
 import { useState } from "react"
 import ZoomRot from "./Parameters/ZoomRot"
 import Import from "./Parameters/Import"
+import { useCanvasStore } from "../../stores/canvasStore"
 
 const Parameters = () => {
-  const [zoom, setZoom] = useState<number>(100)
+  const camera = useCanvasStore((s) => s.ui.camera)
+  const setCamera = useCanvasStore((s) => s.setCamera)
+
   const [zoomLock, setZoomLock] = useState(false)
-  const [rotation, setRotation] = useState<number>(0)
   const [rotLock, setRotLock] = useState(false)
+  const [showZoomRot, setShowZoomRot] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+
+  const setZoomPercent = (z: number) => {
+    if (zoomLock) return
+    setCamera({ ...camera, zoom: z / 100 })
+  }
+
+  const setRotationDeg = (r: number) => {
+    if (rotLock) return
+    setCamera({ ...camera, rotation: r })
+  }
+
   return (
-    <div className="flex flex-row">
+    <div className="fixed top-0 right-0 flex">
       <IconContext.Provider
         value={{
           size: 40,
           weight: "fill",
-          className: "block w-fit p-2 rounded cursor-pointer hover:bg-gray-200",
+          className: "block p-2 rounded cursor-pointer hover:bg-gray-200",
         }}
       >
-        <div className="block w-fit h-fit p-2 rounded cursor-pointer hover:bg-gray-200">100%</div>
-        <div className="block w-fit h-fit p-2 rounded cursor-pointer hover:bg-gray-200">0%</div>
-        <DownloadSimple />
+        <div
+          className="block w-fit h-fit p-2 rounded cursor-pointer hover:bg-gray-200"
+          onClick={() => setShowZoomRot(!showZoomRot)}
+        >
+          {Math.round(camera.zoom * 100)}%
+        </div>
+        <div
+          className="block w-fit h-fit p-2 rounded cursor-pointer hover:bg-gray-200"
+          onClick={() => setShowZoomRot(!showZoomRot)}
+        >
+          {camera.rotation}°
+        </div>
+        <div onClick={() => setShowImport(!showImport)}>
+          <DownloadSimple />
+        </div>
         <UploadSimple />
         <GearSix />
         <Info />
-        <ZoomRot />
-        <Import />
       </IconContext.Provider>
+
+      {showZoomRot && (
+        <div className="absolute top-12 right-0">
+          <ZoomRot
+            zoom={Math.round(camera.zoom * 100)}
+            rotation={camera.rotation}
+            zoomLock={zoomLock}
+            rotLock={rotLock}
+            onZoomChange={setZoomPercent}
+            onRotationChange={setRotationDeg}
+            onToggleZoomLock={() => setZoomLock((v) => !v)}
+            onToggleRotLock={() => setRotLock((v) => !v)}
+          />
+        </div>
+      )}
+
+      {showImport && (
+        <div className="absolute top-12 right-0">
+          <Import />
+        </div>
+      )}
     </div>
   )
 }
