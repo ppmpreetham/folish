@@ -32,8 +32,8 @@ function App() {
       {/* <InfiniteCanvas />
       <Toolbar />
       <LayersPanel /> */}
-      {/* <ColorPicker /> */}
-      <LayersNew />
+      <ColorPicker />
+      {/* <LayersNew /> */}
 
       {/* Info Overlay */}
       <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow text-sm text-gray-600">
