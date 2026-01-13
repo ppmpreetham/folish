@@ -171,13 +171,27 @@ export const InfiniteCanvas: React.FC = () => {
     },
   })
 
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+    }
+
+    el.addEventListener("wheel", onWheel, { passive: false })
+    return () => {
+      el.removeEventListener("wheel", onWheel)
+    }
+  }, [])
+
   const cursorClass =
     ui.activeTool === "pan" ? "cursor-grab active:cursor-grabbing" : "cursor-crosshair"
 
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full bg-slate-50 overflow-hidden touch-none select-none ${cursorClass}`}
+      className={`relative w-full h-full bg-slate-50 overflow-hidden touch-none overscroll-none select-none ${cursorClass}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

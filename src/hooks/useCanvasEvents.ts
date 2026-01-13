@@ -39,24 +39,40 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      const newCamera = calculateZoom(e.deltaY, e.clientX, e.clientY)
+      // e.preventDefault()
+      const isTrackpad = Math.max(Math.abs(e.deltaX), Math.abs(e.deltaY)) < 50
+
+      if (isTrackpad && !e.ctrlKey) {
+        const PAN_MULTIPLIER = 2.5
+        props.onPanMove(e.deltaX * PAN_MULTIPLIER, e.deltaY * PAN_MULTIPLIER)
+        return
+      }
+
+      const ZOOM_MULTIPLIER = isTrackpad ? 10 : 1.0
+      const newCamera = calculateZoom(e.deltaY * ZOOM_MULTIPLIER, e.clientX, e.clientY)
       props.onZoom(newCamera)
     },
-    [calculateZoom, props.onZoom]
+    [calculateZoom, props.onPanMove, props.onZoom]
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      if (rafRef.current) return
+
+      const x = e.clientX
+      const y = e.clientY
+      const pressure = e.pressure
 
       rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = undefined
+
         if (isPanningRef.current) {
-          const dx = e.clientX - lastPosRef.current.x
-          const dy = e.clientY - lastPosRef.current.y
-          lastPosRef.current = { x: e.clientX, y: e.clientY }
+          const dx = x - lastPosRef.current.x
+          const dy = y - lastPosRef.current.y
+          lastPosRef.current = { x, y }
           props.onPanMove(dx, dy)
         } else if (isDrawingRef.current) {
-          props.onStrokeMove({ ...toWorld(e.clientX, e.clientY), pressure: e.pressure })
+          props.onStrokeMove({ ...toWorld(x, y), pressure })
         }
       })
     },
