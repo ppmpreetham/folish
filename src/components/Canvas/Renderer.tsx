@@ -21,7 +21,7 @@ export const Renderer = memo(() => {
         }
 
         return (
-          <g key={layer.id} opacity={layer.opacity}>
+          <g key={layer.id} style={{ opacity: layer.opacity }}>
             {layer.strokeIds.map((strokeId) => {
               const stroke = strokes[strokeId]
               if (!stroke || !stroke.pathData) return null
@@ -30,14 +30,7 @@ export const Renderer = memo(() => {
                 return null
               }
 
-              return (
-                <path
-                  key={stroke.id}
-                  d={stroke.pathData}
-                  fill={stroke.color}
-                  opacity={stroke.opacity}
-                />
-              )
+              return <path key={stroke.id} d={stroke.pathData} fill={stroke.color} />
             })}
           </g>
         )
