@@ -56,6 +56,14 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
         ctx.fillStyle = hex
         ctx.fill(path)
 
+        if (hex && hex !== "") {
+          ctx.fillStyle = hex
+          ctx.fill(path)
+        } else {
+          ctx.fillStyle = "transparent"
+          ctx.fill(path)
+        }
+
         ctx.strokeStyle = "rgba(255, 255, 255, 0.2)"
         ctx.lineWidth = 0.5
         ctx.stroke(path)

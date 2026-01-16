@@ -4,6 +4,13 @@ export interface Point {
   pressure: number
 }
 
+export interface Bounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface Stroke {
   id: string
   points: Point[]
@@ -14,6 +21,7 @@ export interface Stroke {
   opacity: number
   tool: Tool
   timestamp: number
+  bounds?: Bounds
 }
 
 export interface Layer {
@@ -23,6 +31,7 @@ export interface Layer {
   locked: boolean
   opacity: number
   strokeIds: string[]
+  bounds?: Bounds
 }
 
 export interface Camera {
@@ -53,6 +62,8 @@ export interface UIState {
   activeOpacity: number
   activeWidth: number
   activeLayerId: string
+  showLayersPanel?: boolean
+  showPrecisionPanel?: boolean
 }
 
 export interface SimpleUIState {

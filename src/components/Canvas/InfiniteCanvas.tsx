@@ -7,9 +7,6 @@ import { getStroke } from "perfect-freehand"
 import { getSvgPathFromStroke } from "../../utils/brushEngine"
 import { DEFAULT_BRUSH } from "../../utils/brushConfig"
 
-const V_MAX = 12 // responsive velocity
-const ALPHA_MIN = 0.15 // slow precision drawing
-const ALPHA_MAX = 0.85 // fast freedom
 const V_MAX = 12
 const ALPHA_MIN = 0.15
 const ALPHA_MAX = 0.85
@@ -54,6 +51,8 @@ export const InfiniteCanvas: React.FC = () => {
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.scale(dpr, dpr)
       }
+
+      setCamera(cameraRef.current)
     }
 
     const observer = new ResizeObserver(updateLayout)
@@ -67,7 +66,7 @@ export const InfiniteCanvas: React.FC = () => {
       const raf = rafRef.current
       if (raf !== null) cancelAnimationFrame(raf)
     }
-  }, [])
+  }, [setCamera])
 
   const renderLiveStroke = useCallback(() => {
     const canvas = overlayCanvasRef.current

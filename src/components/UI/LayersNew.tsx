@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from "react"
+import React, { FC, memo, useEffect, useMemo, useRef, useState } from "react"
 import clsx from "clsx"
 import { useShallow } from "zustand/react/shallow"
 import {
@@ -18,46 +18,50 @@ import {
 import { useCanvasStore } from "../../stores/canvasStore"
 import { Layer, Stroke } from "../../types"
 
-const getLayerBounds = (strokes: Stroke[]) => {
-  if (strokes.length === 0) return { x: 0, y: 0, width: 100, height: 100 }
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity
-  strokes.forEach((stroke) => {
-    stroke.points.forEach((p) => {
-      if (p.x < minX) minX = p.x
-      if (p.y < minY) minY = p.y
-      if (p.x > maxX) maxX = p.x
-      if (p.y > maxY) maxY = p.y
-    })
-  })
-  const width = maxX - minX
-  const height = maxY - minY
-  const padding = Math.max(width, height) * 0.1
-  return {
-    x: minX - padding,
-    y: minY - padding,
-    width: width + padding * 2,
-    height: height + padding * 2,
-  }
-}
+// const getLayerBounds = (strokes: Stroke[]) => {
+//   if (strokes.length === 0) return { x: 0, y: 0, width: 100, height: 100 }
+//   let minX = Infinity,
+//     minY = Infinity,
+//     maxX = -Infinity,
+//     maxY = -Infinity
+//   strokes.forEach((stroke) => {
+//     stroke.points.forEach((p) => {
+//       if (p.x < minX) minX = p.x
+//       if (p.y < minY) minY = p.y
+//       if (p.x > maxX) maxX = p.x
+//       if (p.y > maxY) maxY = p.y
+//     })
+//   })
+//   const width = maxX - minX
+//   const height = maxY - minY
+//   const padding = Math.max(width, height) * 0.1
+//   return {
+//     x: minX - padding,
+//     y: minY - padding,
+//     width: width + padding * 2,
+//     height: height + padding * 2,
+//   }
+// }
 
 const LayerThumbnail = memo(({ layerId }: { layerId: string }) => {
+  const layer = useCanvasStore((state) => state.doc.layers.find((l) => l.id === layerId))
   const strokes = useCanvasStore(useShallow((state) => state.getStrokesByLayer(layerId)))
   const color = useCanvasStore((state) => state.ui.activeColor)
-  const bounds = useMemo(() => getLayerBounds(strokes), [strokes])
+
+  const bounds = layer?.bounds || { x: 0, y: 0, width: 100, height: 100 }
 
   if (strokes.length === 0) {
     return <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded opacity-50" />
   }
 
+  const padding = Math.max(bounds.width, bounds.height) * 0.1
+  const viewBox = `${bounds.x - padding} ${bounds.y - padding} ${bounds.width + padding * 2} ${
+    bounds.height + padding * 2
+  }`
+
   return (
     <div className="w-10 h-10 bg-white border border-gray-200 rounded overflow-hidden relative">
-      <svg
-        viewBox={`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`}
-        className="w-full h-full pointer-events-none"
-      >
+      <svg viewBox={viewBox} className="w-full h-full pointer-events-none">
         {strokes.map((stroke) => (
           <path
             key={stroke.id}
@@ -109,7 +113,7 @@ const LayerSettings = ({ layer, position, onClose, onRename }: LayerSettingsProp
         left: position.left,
         zIndex: 9999,
       }}
-      className="w-fit p-2 rounded-lg flex flex-col gap-2 bg-white border border-gray-200 animate-in fade-in zoom-in-95 duration-100 min-w-[200px]"
+      className="w-fit p-2 rounded-lg flex flex-col gap-2 bg-white border border-gray-200 animate-in fade-in zoom-in-95 duration-100 min-w-50"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex flex-row gap-1 items-center justify-between">
@@ -287,7 +291,7 @@ const SingleLayer = ({
   )
 }
 
-const LayersNew = () => {
+const LayersNew: FC<{ className?: string }> = ({ className }) => {
   const layers = useCanvasStore((state) => state.doc.layers)
   const activeLayerId = useCanvasStore((state) => state.ui.activeLayerId)
   const addLayer = useCanvasStore((state) => state.addLayer)
@@ -303,7 +307,9 @@ const LayersNew = () => {
   const displayLayers = useMemo(() => [...layers].reverse(), [layers])
 
   return (
-    <div className="fixed bottom-4 left-4 flex flex-col items-start gap-2 max-w-70">
+    <div
+      className={clsx("fixed bottom-4 left-4 flex flex-col items-start gap-2 max-w-70", className)}
+    >
       <div className="flex flex-row gap-2 mb-1">
         <button
           onClick={() => setAutoSort(!autoSort)}

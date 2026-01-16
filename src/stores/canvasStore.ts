@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { devtools, persist } from "zustand/middleware"
 import { produceWithPatches, applyPatches, enablePatches, Patch } from "immer"
 import type { Stroke, Layer, Camera, Tool, Point, CanvasState, UIState } from "../types"
+import { calculateStrokeBounds, expandBounds, mergeBounds } from "../utils/bounds"
 
 enablePatches()
 
@@ -39,6 +40,9 @@ interface CanvasStore {
   toggleLayerLock: (id: string) => void
   duplicateLayer: (id: string) => void
 
+  toggleLayersPanel: (visible: boolean) => void
+  togglePrecisionPanel: (visible: boolean) => void
+
   undo: () => void
   redo: () => void
   canUndo: () => boolean
@@ -49,7 +53,15 @@ interface CanvasStore {
 
 const initialDoc: CanvasState = {
   layers: [
-    { id: "layer-1", name: "Layer 1", visible: true, locked: false, opacity: 1, strokeIds: [] },
+    {
+      id: "layer-1",
+      name: "Layer 1",
+      visible: true,
+      locked: false,
+      opacity: 1,
+      strokeIds: [],
+      bounds: undefined,
+    },
   ],
   strokes: {},
 }
@@ -61,6 +73,8 @@ const initialUI: UIState = {
   activeWidth: 2,
   activeOpacity: 1,
   activeLayerId: "layer-1",
+  showLayersPanel: true,
+  showPrecisionPanel: true,
 }
 
 const MAX_HISTORY = 50
@@ -112,9 +126,19 @@ export const useCanvasStore = create<CanvasStore>()(
 
         addStroke: (stroke) =>
           get().execute((draft) => {
-            draft.strokes[stroke.id] = { ...stroke }
+            const rawBounds = calculateStrokeBounds(stroke.points)
+            const strokeBounds = expandBounds(rawBounds, stroke.width * 2)
+
+            draft.strokes[stroke.id] = { ...stroke, bounds: strokeBounds }
             const layer = draft.layers.find((l) => l.id === stroke.layerId)
-            if (layer) layer.strokeIds.push(stroke.id)
+            if (layer) {
+              layer.strokeIds.push(stroke.id)
+              if (!layer.bounds) {
+                layer.bounds = strokeBounds
+              } else {
+                layer.bounds = mergeBounds(layer.bounds, strokeBounds)
+              }
+            }
           }),
 
         updateStrokePoints: (id, points) =>
@@ -129,8 +153,24 @@ export const useCanvasStore = create<CanvasStore>()(
             ids.forEach((id) => {
               delete draft.strokes[id]
             })
+
             draft.layers.forEach((layer) => {
               layer.strokeIds = layer.strokeIds.filter((sid) => !ids.includes(sid))
+
+              if (layer.strokeIds.length === 0) {
+                layer.bounds = undefined
+              } else {
+                const strokes = layer.strokeIds
+                  .map((id) => draft.strokes[id])
+                  .filter((s) => s?.bounds)
+
+                if (strokes.length > 0) {
+                  layer.bounds = strokes.reduce(
+                    (acc, stroke) => mergeBounds(acc, stroke.bounds!),
+                    strokes[0].bounds!
+                  )
+                }
+              }
             })
           })
         },
@@ -138,7 +178,15 @@ export const useCanvasStore = create<CanvasStore>()(
         addLayer: (name) => {
           const id = crypto.randomUUID()
           get().execute((draft) => {
-            draft.layers.push({ id, name, visible: true, locked: false, opacity: 1, strokeIds: [] })
+            draft.layers.push({
+              id,
+              name,
+              visible: true,
+              locked: false,
+              opacity: 1,
+              strokeIds: [],
+              bounds: undefined,
+            })
           })
           get().setActiveLayer(id)
         },
@@ -208,10 +256,19 @@ export const useCanvasStore = create<CanvasStore>()(
               id: newLayerId,
               name: `${sourceLayer.name} (Copy)`,
               strokeIds: newStrokeIds,
+              bounds: sourceLayer.bounds,
             }
 
             draft.layers.splice(index + 1, 0, newLayer)
           }),
+
+        toggleLayersPanel: (visible: boolean) => {
+          set((state) => ({ ui: { ...state.ui, showLayersPanel: visible } }))
+        },
+
+        togglePrecisionPanel: (visible: boolean) => {
+          set((state) => ({ ui: { ...state.ui, showPrecisionPanel: visible } }))
+        },
 
         undo: () => {
           const { past, doc } = get()

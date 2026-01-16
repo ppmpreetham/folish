@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { InfiniteCanvas } from "./components/Canvas/InfiniteCanvas"
 import { Toolbar } from "./components/UI/ToolBar"
 import { useCanvasStore } from "./stores/canvasStore"
@@ -10,6 +10,8 @@ import MenuBar from "./components/UI/Parameters/MenuBar"
 function App() {
   const undo = useCanvasStore((state) => state.undo)
   const redo = useCanvasStore((state) => state.redo)
+  const showLayersPanel = useCanvasStore((state) => state.ui.showLayersPanel)
+  const showPrecisionPanel = useCanvasStore((state) => state.ui.showPrecisionPanel)
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -33,9 +35,9 @@ function App() {
       <InfiniteCanvas />
       {/* <Toolbar /> */}
       {/* <ColorPicker /> */}
-      <LayersNew />
       <MenuBar />
-      <Parameters />
+      <LayersNew className={showLayersPanel ? "" : "hidden"} />
+      <Parameters className={showPrecisionPanel ? "" : "hidden"} />
 
       {/* Info Overlay */}
       <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg text-sm text-gray-600">

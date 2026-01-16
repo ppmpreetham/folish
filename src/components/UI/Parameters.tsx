@@ -1,10 +1,11 @@
 import { DownloadSimple, UploadSimple, GearSix, Info, IconContext } from "phosphor-react"
-import { useState } from "react"
+import { FC, useState } from "react"
 import ZoomRot from "./Parameters/ZoomRot"
 import Import from "./Parameters/Import"
 import { useCanvasStore } from "../../stores/canvasStore"
+import { clsx } from "clsx"
 
-const Parameters = () => {
+const Parameters: FC<{ className?: string }> = ({ className }) => {
   const camera = useCanvasStore((s) => s.ui.camera)
   const setCamera = useCanvasStore((s) => s.setCamera)
 
@@ -24,7 +25,7 @@ const Parameters = () => {
   }
 
   return (
-    <div className="fixed top-0 right-0 flex">
+    <div className={clsx("fixed top-0 right-0 flex", className)}>
       <IconContext.Provider
         value={{
           size: 40,
