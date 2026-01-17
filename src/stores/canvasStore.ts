@@ -1,8 +1,9 @@
 import { create } from "zustand"
 import { devtools, persist } from "zustand/middleware"
 import { produceWithPatches, applyPatches, enablePatches, Patch } from "immer"
-import type { Stroke, Layer, Camera, Tool, Point, CanvasState, UIState } from "../types"
+import type { Stroke, Layer, Camera, Tool, Point, CanvasState, UIState, Bounds } from "../types"
 import { calculateStrokeBounds, expandBounds, mergeBounds } from "../utils/bounds"
+import { SpatialIndex } from "../utils/spatialIndex"
 
 enablePatches()
 
@@ -16,9 +17,12 @@ interface CanvasStore {
   ui: UIState
   past: PatchHistoryEntry[]
   future: PatchHistoryEntry[]
+  spatialIndex: SpatialIndex
 
   getActiveLayer: () => Layer | undefined
   getStrokesByLayer: (layerId: string) => Stroke[]
+  queryVisibleStrokes: (viewport: Bounds) => string[]
+  rebuildSpatialIndex: () => void
 
   setCamera: (camera: Camera) => void
   setActiveTool: (tool: Tool) => void
@@ -87,6 +91,7 @@ export const useCanvasStore = create<CanvasStore>()(
         ui: initialUI,
         past: [],
         future: [],
+        spatialIndex: new SpatialIndex(),
 
         getActiveLayer: () => {
           const { doc, ui } = get()
@@ -100,6 +105,20 @@ export const useCanvasStore = create<CanvasStore>()(
           return layer.strokeIds.map((id) => doc.strokes[id]).filter((s): s is Stroke => !!s)
         },
 
+        queryVisibleStrokes: (viewport) => {
+          return get().spatialIndex.query(viewport)
+        },
+
+        rebuildSpatialIndex: () => {
+          const { doc, spatialIndex } = get()
+          console.log(
+            "🔄 Rebuilding spatial index with",
+            Object.keys(doc.strokes).length,
+            "strokes",
+          )
+          spatialIndex.buildFromStrokes(doc.strokes)
+        },
+
         setCamera: (camera) => set((state) => ({ ui: { ...state.ui, camera } })),
         setActiveTool: (tool) => set((state) => ({ ui: { ...state.ui, activeTool: tool } })),
         setActiveColor: (color) => set((state) => ({ ui: { ...state.ui, activeColor: color } })),
@@ -111,10 +130,11 @@ export const useCanvasStore = create<CanvasStore>()(
         setLayerOpacityTransient: (id: string, opacity: number) =>
           set((state) => {
             const newLayers = state.doc.layers.map((l) =>
-              l.id === id ? { ...l, opacity: Math.max(0, Math.min(1, opacity)) } : l
+              l.id === id ? { ...l, opacity: Math.max(0, Math.min(1, opacity)) } : l,
             )
             return { doc: { ...state.doc, layers: newLayers } }
           }),
+
         execute: (recipe) => {
           const [nextDoc, patches, inversePatches] = produceWithPatches(get().doc, recipe)
           set((state) => ({
@@ -124,12 +144,14 @@ export const useCanvasStore = create<CanvasStore>()(
           }))
         },
 
-        addStroke: (stroke) =>
-          get().execute((draft) => {
-            const rawBounds = calculateStrokeBounds(stroke.points)
-            const strokeBounds = expandBounds(rawBounds, stroke.width * 2)
+        addStroke: (stroke) => {
+          const rawBounds = calculateStrokeBounds(stroke.points)
+          const strokeBounds = expandBounds(rawBounds, stroke.width * 2)
+          const strokeWithBounds = { ...stroke, bounds: strokeBounds }
 
-            draft.strokes[stroke.id] = { ...stroke, bounds: strokeBounds }
+          get().execute((draft) => {
+            draft.strokes[stroke.id] = strokeWithBounds
+
             const layer = draft.layers.find((l) => l.id === stroke.layerId)
             if (layer) {
               layer.strokeIds.push(stroke.id)
@@ -139,16 +161,38 @@ export const useCanvasStore = create<CanvasStore>()(
                 layer.bounds = mergeBounds(layer.bounds, strokeBounds)
               }
             }
-          }),
+          })
 
-        updateStrokePoints: (id, points) =>
+          if (strokeWithBounds.bounds) {
+            console.log("✅ Adding stroke to spatial index:", stroke.id)
+            get().spatialIndex.insert(stroke.id, strokeWithBounds.bounds)
+          }
+        },
+
+        updateStrokePoints: (id, points) => {
+          const stroke = get().doc.strokes[id]
+          if (!stroke) return
+
+          const rawBounds = calculateStrokeBounds(points)
+          const newBounds = expandBounds(rawBounds, stroke.width * 2)
+
           get().execute((draft) => {
-            const stroke = draft.strokes[id]
-            if (stroke) stroke.points = [...points]
-          }),
+            const draftStroke = draft.strokes[id]
+            if (draftStroke) {
+              draftStroke.points = [...points]
+              draftStroke.bounds = newBounds
+            }
+          })
+
+          get().spatialIndex.remove(id)
+          get().spatialIndex.insert(id, newBounds)
+        },
 
         deleteStrokes: (ids) => {
           if (ids.length === 0) return
+
+          get().spatialIndex.removeBatch(ids)
+
           get().execute((draft) => {
             ids.forEach((id) => {
               delete draft.strokes[id]
@@ -167,7 +211,7 @@ export const useCanvasStore = create<CanvasStore>()(
                 if (strokes.length > 0) {
                   layer.bounds = strokes.reduce(
                     (acc, stroke) => mergeBounds(acc, stroke.bounds!),
-                    strokes[0].bounds!
+                    strokes[0].bounds!,
                   )
                 }
               }
@@ -193,15 +237,25 @@ export const useCanvasStore = create<CanvasStore>()(
 
         deleteLayer: (id) => {
           if (get().doc.layers.length <= 1) return
+
+          const layer = get().doc.layers.find((l) => l.id === id)
+          if (layer) {
+            get().spatialIndex.removeBatch(layer.strokeIds)
+          }
+
           get().execute((draft) => {
             const layer = draft.layers.find((l) => l.id === id)
-            if (layer)
+            if (layer) {
               layer.strokeIds.forEach((sid) => {
                 delete draft.strokes[sid]
               })
+            }
             draft.layers = draft.layers.filter((l) => l.id !== id)
           })
-          if (get().ui.activeLayerId === id) get().setActiveLayer(get().doc.layers[0].id)
+
+          if (get().ui.activeLayerId === id) {
+            get().setActiveLayer(get().doc.layers[0].id)
+          }
         },
 
         toggleLayerVisibility: (id) =>
@@ -228,27 +282,33 @@ export const useCanvasStore = create<CanvasStore>()(
             if (layer) layer.locked = !layer.locked
           }),
 
-        duplicateLayer: (id) =>
+        duplicateLayer: (id) => {
+          const sourceLayer = get().doc.layers.find((l) => l.id === id)
+          if (!sourceLayer) return
+
+          const newLayerId = crypto.randomUUID()
+          const newStrokeIds: string[] = []
+          const newStrokesMap: Record<string, Stroke> = {}
+
+          sourceLayer.strokeIds.forEach((strokeId) => {
+            const sourceStroke = get().doc.strokes[strokeId]
+            if (sourceStroke) {
+              const newStrokeId = crypto.randomUUID()
+              newStrokesMap[newStrokeId] = {
+                ...sourceStroke,
+                id: newStrokeId,
+                layerId: newLayerId,
+              }
+              newStrokeIds.push(newStrokeId)
+            }
+          })
+
           get().execute((draft) => {
             const index = draft.layers.findIndex((l) => l.id === id)
             if (index === -1) return
 
-            const sourceLayer = draft.layers[index]
-            const newLayerId = crypto.randomUUID()
-            const newStrokeIds: string[] = []
-
-            sourceLayer.strokeIds.forEach((strokeId) => {
-              const sourceStroke = draft.strokes[strokeId]
-              if (sourceStroke) {
-                const newStrokeId = crypto.randomUUID()
-
-                draft.strokes[newStrokeId] = {
-                  ...sourceStroke,
-                  id: newStrokeId,
-                  layerId: newLayerId,
-                }
-                newStrokeIds.push(newStrokeId)
-              }
+            Object.entries(newStrokesMap).forEach(([id, stroke]) => {
+              draft.strokes[id] = stroke
             })
 
             const newLayer: Layer = {
@@ -260,7 +320,14 @@ export const useCanvasStore = create<CanvasStore>()(
             }
 
             draft.layers.splice(index + 1, 0, newLayer)
-          }),
+          })
+
+          Object.entries(newStrokesMap).forEach(([id, stroke]) => {
+            if (stroke.bounds) {
+              get().spatialIndex.insert(id, stroke.bounds)
+            }
+          })
+        },
 
         toggleLayersPanel: (visible: boolean) => {
           set((state) => ({ ui: { ...state.ui, showLayersPanel: visible } }))
@@ -279,6 +346,7 @@ export const useCanvasStore = create<CanvasStore>()(
             past: state.past.slice(0, -1),
             future: [entry, ...state.future],
           }))
+          get().rebuildSpatialIndex()
         },
 
         redo: () => {
@@ -290,18 +358,34 @@ export const useCanvasStore = create<CanvasStore>()(
             past: [...state.past, entry],
             future: state.future.slice(1),
           }))
+          get().rebuildSpatialIndex()
         },
 
         canUndo: () => get().past.length > 0,
         canRedo: () => get().future.length > 0,
-        resetCanvas: () => set({ doc: initialDoc, ui: initialUI, past: [], future: [] }),
+
+        resetCanvas: () => {
+          set({ doc: initialDoc, ui: initialUI, past: [], future: [] })
+          get().spatialIndex.clear()
+        },
+
         clearHistory: () => set({ past: [], future: [] }),
       }),
       {
         name: "folish-storage",
-        partialize: (state) => ({ doc: state.doc }),
+        partialize: (state) => ({
+          doc: state.doc,
+        }),
         version: 1,
-      }
-    )
-  )
+
+        onRehydrateStorage: () => (state) => {
+          if (state) {
+            state.spatialIndex = new SpatialIndex()
+            state.rebuildSpatialIndex()
+            console.log("🔄 Spatial index rebuilt after storage rehydration")
+          }
+        },
+      },
+    ),
+  ),
 )
