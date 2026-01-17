@@ -7,6 +7,7 @@ export interface RBushItem {
   maxX: number
   maxY: number
   id: string
+  layerId: string
 }
 
 export class SpatialIndex {
@@ -18,51 +19,38 @@ export class SpatialIndex {
     this.itemMap = new Map()
   }
 
-  /**
-   * Convert Bounds to RBush format
-   */
-  private boundsToRBush(id: string, bounds: Bounds): RBushItem {
+  private boundsToRBush(id: string, layerId: string, bounds: Bounds): RBushItem {
     return {
       minX: bounds.x,
       minY: bounds.y,
       maxX: bounds.x + bounds.width,
       maxY: bounds.y + bounds.height,
       id,
+      layerId,
     }
   }
 
-  /**
-   * Build index from scratch (bulk loading is faster)
-   */
   buildFromStrokes(strokes: Record<string, Stroke>): void {
     const items: RBushItem[] = []
-
     for (const [id, stroke] of Object.entries(strokes)) {
       if (stroke.bounds) {
-        const item = this.boundsToRBush(id, stroke.bounds)
+        const item = this.boundsToRBush(id, stroke.layerId, stroke.bounds)
         items.push(item)
         this.itemMap.set(id, item)
       }
     }
-
     this.tree.clear()
     if (items.length > 0) {
       this.tree.load(items)
     }
   }
 
-  /**
-   * Insert a single stroke (when drawing completes)
-   */
-  insert(id: string, bounds: Bounds): void {
-    const item = this.boundsToRBush(id, bounds)
+  insert(id: string, layerId: string, bounds: Bounds): void {
+    const item = this.boundsToRBush(id, layerId, bounds)
     this.tree.insert(item)
     this.itemMap.set(id, item)
   }
 
-  /**
-   * Remove a stroke (when deleted)
-   */
   remove(id: string): void {
     const item = this.itemMap.get(id)
     if (item) {
@@ -71,18 +59,11 @@ export class SpatialIndex {
     }
   }
 
-  /**
-   * Remove multiple strokes efficiently
-   */
   removeBatch(ids: string[]): void {
     ids.forEach((id) => this.remove(id))
   }
 
-  /**
-   * Query visible strokes in viewport
-   * Returns array of stroke IDs
-   */
-  query(viewport: Bounds): string[] {
+  query(viewport: Bounds): Record<string, string[]> {
     const results = this.tree.search({
       minX: viewport.x,
       minY: viewport.y,
@@ -90,12 +71,19 @@ export class SpatialIndex {
       maxY: viewport.y + viewport.height,
     })
 
-    return results.map((item) => item.id)
+    const grouped: Record<string, string[]> = {}
+
+    for (const item of results) {
+      const layerId = item.layerId
+
+      if (layerId) {
+        if (!grouped[layerId]) grouped[layerId] = []
+        grouped[layerId].push(item.id)
+      }
+    }
+    return grouped
   }
 
-  /**
-   * Get stats for debugging
-   */
   getStats() {
     return {
       totalItems: this.itemMap.size,
@@ -103,9 +91,6 @@ export class SpatialIndex {
     }
   }
 
-  /**
-   * Clear the entire index
-   */
   clear(): void {
     this.tree.clear()
     this.itemMap.clear()

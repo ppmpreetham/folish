@@ -21,8 +21,9 @@ interface CanvasStore {
 
   getActiveLayer: () => Layer | undefined
   getStrokesByLayer: (layerId: string) => Stroke[]
-  queryVisibleStrokes: (viewport: Bounds) => string[]
+  queryVisibleStrokes: (viewport: Bounds) => Record<string, string[]>
   rebuildSpatialIndex: () => void
+  queryVisibleStrokesByLayer: (viewport: Bounds) => Record<string, string[]>
 
   setCamera: (camera: Camera) => void
   setActiveTool: (tool: Tool) => void
@@ -165,12 +166,12 @@ export const useCanvasStore = create<CanvasStore>()(
 
           if (strokeWithBounds.bounds) {
             console.log("✅ Adding stroke to spatial index:", stroke.id)
-            get().spatialIndex.insert(stroke.id, strokeWithBounds.bounds)
+            get().spatialIndex.insert(stroke.id, stroke.layerId, strokeWithBounds.bounds)
           }
         },
 
         updateStrokePoints: (id, points) => {
-          const stroke = get().doc.strokes[id]
+          const stroke = get().doc.strokes[id] // Need old stroke for layerId
           if (!stroke) return
 
           const rawBounds = calculateStrokeBounds(points)
@@ -185,7 +186,11 @@ export const useCanvasStore = create<CanvasStore>()(
           })
 
           get().spatialIndex.remove(id)
-          get().spatialIndex.insert(id, newBounds)
+          get().spatialIndex.insert(id, stroke.layerId, newBounds)
+        },
+
+        queryVisibleStrokesByLayer: (viewport) => {
+          return get().spatialIndex.query(viewport)
         },
 
         deleteStrokes: (ids) => {
@@ -324,7 +329,7 @@ export const useCanvasStore = create<CanvasStore>()(
 
           Object.entries(newStrokesMap).forEach(([id, stroke]) => {
             if (stroke.bounds) {
-              get().spatialIndex.insert(id, stroke.bounds)
+              get().spatialIndex.insert(id, stroke.layerId, stroke.bounds)
             }
           })
         },

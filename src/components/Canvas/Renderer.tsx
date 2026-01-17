@@ -17,10 +17,8 @@ export const Renderer = memo(() => {
     return vp
   }, [camera.x, camera.y, camera.zoom])
 
-  const visibleStrokeIds = useMemo(() => {
-    const ids = queryVisibleStrokes(viewport)
-    console.log("👁️ Visible strokes:", ids.length, "/", Object.keys(strokes).length)
-    return new Set(ids)
+  const visibleStrokesMap = useMemo(() => {
+    return queryVisibleStrokes(viewport)
   }, [viewport, queryVisibleStrokes, strokes])
 
   console.log("🎨 Rendering", layers.length, "layers")
@@ -30,23 +28,18 @@ export const Renderer = memo(() => {
       <SpatialIndexStats />
       {layers.map((layer) => {
         if (!layer.visible) return null
+
+        const layerVisibleIds = visibleStrokesMap[layer.id] || []
+        if (layerVisibleIds.length === 0) return null
+
         console.log("📄 Layer", layer.name, "- Strokes:", layer.strokeIds.length)
 
         return (
           <g key={layer.id} style={{ opacity: layer.opacity }}>
-            {layer.strokeIds.map((strokeId) => {
-              if (!visibleStrokeIds.has(strokeId)) {
-                console.log("🚫 Culled:", strokeId)
-                return null
-              }
-
+            {layerVisibleIds.map((strokeId) => {
               const stroke = strokes[strokeId]
-              if (!stroke || !stroke.pathData) {
-                console.log("❌ Missing stroke data:", strokeId)
-                return null
-              }
+              if (!stroke) return null
 
-              console.log("✅ Rendering:", strokeId)
               return (
                 <path
                   key={stroke.id}

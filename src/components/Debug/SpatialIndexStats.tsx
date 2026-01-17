@@ -15,26 +15,30 @@ export const SpatialIndexStats = () => {
       height: window.innerHeight / camera.zoom,
     }
 
-    const visible = queryVisibleStrokes(viewport)
+    const visibleGroups = queryVisibleStrokes(viewport)
+
+    const visibleCount = Object.values(visibleGroups).reduce((acc, ids) => acc + ids.length, 0)
+
     const total = Object.keys(strokes).length
 
     return {
       total,
-      visible: visible.length,
-      culled: total - visible.length,
-      cullRate: total > 0 ? (((total - visible.length) / total) * 100).toFixed(1) : 0,
+      visible: visibleCount, // Use the new count
+      culled: total - visibleCount,
+      cullRate: total > 0 ? (((total - visibleCount) / total) * 100).toFixed(1) : 0,
       ...spatialIndex.getStats(),
     }
   }, [spatialIndex, strokes, camera, queryVisibleStrokes])
 
   return (
-    <div className="fixed top-4 right-4 bg-black/80 text-white p-3 rounded-lg text-xs font-mono">
+    <div className="fixed top-4 right-4 bg-black/80 text-white p-3 rounded-lg text-xs font-mono pointer-events-none select-none z-50">
       <div className="font-bold mb-2">Spatial Index Stats</div>
       <div>Total Strokes: {stats.total}</div>
       <div>Visible: {stats.visible}</div>
       <div>Culled: {stats.culled}</div>
       <div>Cull Rate: {stats.cullRate}%</div>
       <div>Indexed: {stats.totalItems}</div>
+      <div>Tree Depth: {stats.treeDepth}</div>
     </div>
   )
 }
