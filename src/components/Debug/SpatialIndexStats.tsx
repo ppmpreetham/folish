@@ -23,7 +23,7 @@ export const SpatialIndexStats = () => {
 
     return {
       total,
-      visible: visibleCount, // Use the new count
+      visible: visibleCount,
       culled: total - visibleCount,
       cullRate: total > 0 ? (((total - visibleCount) / total) * 100).toFixed(1) : 0,
       ...spatialIndex.getStats(),

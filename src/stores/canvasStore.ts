@@ -171,7 +171,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         updateStrokePoints: (id, points) => {
-          const stroke = get().doc.strokes[id] // Need old stroke for layerId
+          const stroke = get().doc.strokes[id]
           if (!stroke) return
 
           const rawBounds = calculateStrokeBounds(points)

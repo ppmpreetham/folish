@@ -32,12 +32,12 @@ function App() {
 
   return (
     <div className="w-screen h-screen bg-slate-50 overflow-hidden relative">
-      <InfiniteCanvas />
+      {/* <InfiniteCanvas /> */}
       {/* <Toolbar /> */}
-      {/* <ColorPicker /> */}
-      <MenuBar />
+      <ColorPicker />
+      {/* <MenuBar />
       <LayersNew className={showLayersPanel ? "" : "hidden"} />
-      <Parameters className={showPrecisionPanel ? "" : "hidden"} />
+      <Parameters className={showPrecisionPanel ? "" : "hidden"} /> */}
 
       {/* Info Overlay */}
       <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg text-sm text-gray-600">
