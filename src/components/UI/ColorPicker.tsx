@@ -7,6 +7,7 @@ const SIZE = 700
 const DPR = Math.min(window.devicePixelRatio || 1, 2)
 const SECTIONS = 69
 const CENTER_RADIUS = 50
+const FRICTION = 0.95
 
 interface SwatchData {
   color: string
@@ -15,7 +16,6 @@ interface SwatchData {
   swatchCenterX: number
   swatchCenterY: number
   element: { scale: number; alpha: number; hoverScale: number }
-  baseAngle: number
 }
 
 const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
@@ -28,8 +28,11 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   const [selectedColor, setSelectedColor] = useState<string | null>(null)
 
   const rotationRef = useRef(0)
+  const velocityRef = useRef(0)
   const isDraggingRef = useRef(false)
+  const isTouchRef = useRef(false)
   const lastMouseAngleRef = useRef(0)
+  const rafRef = useRef<number>(0)
 
   const { contextSafe } = useGSAP()
 
@@ -43,18 +46,15 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.restore()
 
-    const swatches = swatchesRef.current
     const globalRotation = rotationRef.current
 
     ctx.save()
-
     ctx.translate(SIZE / 2, SIZE / 2)
     ctx.rotate(globalRotation)
     ctx.translate(-SIZE / 2, -SIZE / 2)
 
-    for (let i = 0; i < swatches.length; i++) {
-      const swatch = swatches[i]
-      if (swatch.element.alpha <= 0) continue
+    swatchesRef.current.forEach((swatch) => {
+      if (swatch.element.alpha <= 0) return
 
       ctx.save()
       ctx.globalAlpha = swatch.element.alpha
@@ -67,11 +67,17 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
       ctx.fillStyle = swatch.color
       ctx.fill(swatch.path)
 
-      ctx.strokeStyle = swatch.color === selectedColor ? "white" : "rgba(255, 255, 255, 0.1)"
-      ctx.lineWidth = swatch.color === selectedColor ? 3 : 0.5
-      ctx.stroke(swatch.path)
+      if (swatch.color === selectedColor) {
+        ctx.strokeStyle = "white"
+        ctx.lineWidth = 4
+        ctx.stroke(swatch.path)
+      } else {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)"
+        ctx.lineWidth = 1
+        ctx.stroke(swatch.path)
+      }
       ctx.restore()
-    }
+    })
     ctx.restore()
 
     ctx.save()
@@ -88,41 +94,41 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     ctx.restore()
   }, [isOpen, selectedColor])
 
+  const updateInertia = useCallback(() => {
+    if (!isDraggingRef.current && Math.abs(velocityRef.current) > 0.001) {
+      rotationRef.current += velocityRef.current
+      velocityRef.current *= FRICTION
+      redrawCanvas()
+      rafRef.current = requestAnimationFrame(updateInertia)
+    } else {
+      velocityRef.current = 0
+    }
+  }, [redrawCanvas])
+
   const getMouseAngle = (clientX: number, clientY: number) => {
     const rect = canvasRef.current!.getBoundingClientRect()
-    const centerX = rect.left + rect.width / 2
-    const centerY = rect.top + rect.height / 2
-    return Math.atan2(clientY - centerY, clientX - centerX)
+    return Math.atan2(
+      clientY - (rect.top + rect.height / 2),
+      clientX - (rect.left + rect.width / 2),
+    )
   }
 
   const getCanvasCoords = (clientX: number, clientY: number) => {
     const rect = canvasRef.current!.getBoundingClientRect()
     const x = ((clientX - rect.left) / rect.width) * SIZE
     const y = ((clientY - rect.top) / rect.height) * SIZE
-
     const dx = x - SIZE / 2
     const dy = y - SIZE / 2
     const cos = Math.cos(-rotationRef.current)
     const sin = Math.sin(-rotationRef.current)
-    return {
-      x: SIZE / 2 + (dx * cos - dy * sin),
-      y: SIZE / 2 + (dx * sin + dy * cos),
-    }
+    return { x: SIZE / 2 + (dx * cos - dy * sin), y: SIZE / 2 + (dx * sin + dy * cos) }
   }
-
-  const handleWheel = contextSafe((e: WheelEvent) => {
-    if (!isOpen) return
-    e.preventDefault()
-
-    rotationRef.current += e.deltaY * 0.002
-    redrawCanvas()
-  })
 
   const handlePointerDown = (e: React.PointerEvent) => {
     const { x, y } = getCanvasCoords(e.clientX, e.clientY)
-    const hCtx = hitTestCtxRef.current!
+    isTouchRef.current = e.pointerType === "touch"
 
-    if (hCtx.isPointInPath(centerPathRef.current, x, y)) {
+    if (hitTestCtxRef.current!.isPointInPath(centerPathRef.current, x, y)) {
       const next = !isOpen
       setIsOpen(next)
       toggleWheel(next)
@@ -131,25 +137,31 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
 
     if (isOpen) {
       isDraggingRef.current = true
+      velocityRef.current = 0
+      cancelAnimationFrame(rafRef.current)
       lastMouseAngleRef.current = getMouseAngle(e.clientX, e.clientY)
     }
   }
 
   const handlePointerMove = contextSafe((e: React.PointerEvent) => {
     if (!isOpen) return
-
     if (isDraggingRef.current) {
       const currentAngle = getMouseAngle(e.clientX, e.clientY)
-      rotationRef.current += currentAngle - lastMouseAngleRef.current
+      const delta = currentAngle - lastMouseAngleRef.current
+      rotationRef.current += delta
+
+      if (isTouchRef.current) {
+        velocityRef.current = delta
+      }
+
       lastMouseAngleRef.current = currentAngle
       redrawCanvas()
       return
     }
 
     const { x, y } = getCanvasCoords(e.clientX, e.clientY)
-    const hCtx = hitTestCtxRef.current!
     swatchesRef.current.forEach((s) => {
-      const isHovered = hCtx.isPointInPath(s.path, x, y)
+      const isHovered = hitTestCtxRef.current!.isPointInPath(s.path, x, y)
       const target = isHovered ? 1.15 : 1
       if (s.element.hoverScale !== target) {
         gsap.to(s.element, {
@@ -162,24 +174,20 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     })
   })
 
-  const handlePointerUp = (e: React.PointerEvent) => {
+  const handlePointerUp = () => {
     if (isDraggingRef.current) {
       isDraggingRef.current = false
-      return
-    }
-
-    if (!isOpen) return
-
-    const { x, y } = getCanvasCoords(e.clientX, e.clientY)
-    for (const swatch of swatchesRef.current) {
-      if (hitTestCtxRef.current!.isPointInPath(swatch.path, x, y)) {
-        setSelectedColor(swatch.color)
-        onChange?.(swatch.color)
-        setIsOpen(false)
-        toggleWheel(false)
-        break
+      if (isTouchRef.current && Math.abs(velocityRef.current) > 0.001) {
+        rafRef.current = requestAnimationFrame(updateInertia)
       }
     }
+  }
+
+  const handleWheel = (e: WheelEvent) => {
+    if (!isOpen) return
+    e.preventDefault()
+    rotationRef.current += e.deltaY * 0.002
+    redrawCanvas()
   }
 
   const toggleWheel = contextSafe((open: boolean) => {
@@ -199,8 +207,11 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas) canvas.addEventListener("wheel", handleWheel, { passive: false })
-    return () => canvas?.removeEventListener("wheel", handleWheel)
-  }, [isOpen, handleWheel])
+    return () => {
+      canvas?.removeEventListener("wheel", handleWheel)
+      cancelAnimationFrame(rafRef.current)
+    }
+  }, [isOpen])
 
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
@@ -211,7 +222,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     }
     window.addEventListener("mousedown", handleOutside)
     return () => window.removeEventListener("mousedown", handleOutside)
-  }, [isOpen, toggleWheel])
+  }, [isOpen])
 
   useGSAP(() => {
     const hitCanvas = document.createElement("canvas")
@@ -252,7 +263,6 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
           color: hex,
           code: id,
           path,
-          baseAngle: (aStart + aEnd) / 2,
           swatchCenterX: cx + Math.cos((aStart + aEnd) / 2) * ((rIn + rOut) / 2),
           swatchCenterY: cy + Math.sin((aStart + aEnd) / 2) * ((rIn + rOut) / 2),
           element: { scale: 0, alpha: 0, hoverScale: 1 },
@@ -269,6 +279,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
       className="touch-none select-none cursor-pointer rounded-full bg-transparent fixed top-0 left-0 z-50"
       style={{ width: SIZE, height: SIZE, transform: "translate(-50%, -50%)" }}
     />
