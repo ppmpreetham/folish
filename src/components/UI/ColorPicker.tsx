@@ -56,35 +56,27 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     ctx.rotate(globalRotation)
     ctx.translate(-SIZE / 2, -SIZE / 2)
 
+    let selectedSwatchData: SwatchData | null = null
+
     swatchesRef.current.forEach((swatch) => {
       if (swatch.element.alpha <= 0) return
 
-      ctx.save()
-      ctx.globalAlpha = swatch.element.alpha
-      const combinedScale = swatch.element.scale * swatch.element.hoverScale
-
-      ctx.translate(swatch.swatchCenterX, swatch.swatchCenterY)
-      ctx.scale(combinedScale, combinedScale)
-      ctx.translate(-swatch.swatchCenterX, -swatch.swatchCenterY)
-
-      ctx.fillStyle = swatch.color
-      ctx.fill(swatch.path)
-
       if (swatch.color.toLowerCase() === activeColor?.toLowerCase()) {
-        ctx.strokeStyle = "black"
-        ctx.lineWidth = 2
-        ctx.stroke(swatch.path)
-      } else {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)"
-        ctx.lineWidth = 1
-        ctx.stroke(swatch.path)
+        selectedSwatchData = swatch
+        return
       }
-      ctx.restore()
+
+      drawSwatch(ctx, swatch)
     })
+
+    if (selectedSwatchData) {
+      drawSwatch(ctx, selectedSwatchData, true)
+    }
+
     ctx.restore()
 
     ctx.save()
-    ctx.fillStyle = "#1a1a1a"
+    ctx.fillStyle = activeColor || "#1a1a1a"
     ctx.fill(centerPathRef.current)
     ctx.strokeStyle = "#444"
     ctx.lineWidth = 2
@@ -92,10 +84,37 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     ctx.fillStyle = "white"
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
-    ctx.font = "bold 12px sans-serif"
+    ctx.font = "bold 10px sans-serif"
+
+    ctx.shadowColor = "rgba(0,0,0,0.5)"
+    ctx.shadowBlur = 4
     ctx.fillText(isOpen ? "CLOSE" : "COLORS", SIZE / 2, SIZE / 2)
     ctx.restore()
   }, [isOpen, activeColor])
+
+  const drawSwatch = (ctx: CanvasRenderingContext2D, swatch: SwatchData, isSelected = false) => {
+    ctx.save()
+    ctx.globalAlpha = swatch.element.alpha
+    const combinedScale = swatch.element.scale * swatch.element.hoverScale
+
+    ctx.translate(swatch.swatchCenterX, swatch.swatchCenterY)
+    ctx.scale(combinedScale, combinedScale)
+    ctx.translate(-swatch.swatchCenterX, -swatch.swatchCenterY)
+
+    ctx.fillStyle = swatch.color
+    ctx.fill(swatch.path)
+
+    if (isSelected) {
+      ctx.strokeStyle = "white"
+      ctx.lineWidth = 4
+      ctx.stroke(swatch.path)
+    } else {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.15)"
+      ctx.lineWidth = 1
+      ctx.stroke(swatch.path)
+    }
+    ctx.restore()
+  }
 
   const updateInertia = useCallback(() => {
     if (!isDraggingRef.current && Math.abs(velocityRef.current) > 0.001) {
@@ -152,6 +171,8 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     if (clickedSwatch) {
       setActiveColor(clickedSwatch.color)
       if (onChange) onChange(clickedSwatch.color)
+      setIsOpen(false)
+      toggleWheel(false)
       return
     }
 
@@ -300,6 +321,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
       className="fixed top-0 left-0 z-50 pointer-events-none"
       style={{ width: SIZE, height: SIZE, transform: "translate(-50%, -50%)" }}
     >
+      {/* dummy hit area for when wheel is closed */}
       {!isOpen && (
         <div
           className="absolute top-1/2 left-1/2 cursor-pointer pointer-events-auto"
@@ -326,6 +348,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
           transform: "translate(-50%, -50%)",
           pointerEvents: isOpen ? "auto" : "none",
           cursor: isOpen ? "grab" : "default",
+          transition: "opacity 0.3s ease-in-out",
         }}
       />
     </div>
