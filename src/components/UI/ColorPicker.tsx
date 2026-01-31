@@ -105,8 +105,8 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     ctx.fill(swatch.path)
 
     if (isSelected) {
-      ctx.strokeStyle = "white"
-      ctx.lineWidth = 4
+      ctx.strokeStyle = "black"
+      ctx.lineWidth = 2
       ctx.stroke(swatch.path)
     } else {
       ctx.strokeStyle = "rgba(255, 255, 255, 0.15)"
