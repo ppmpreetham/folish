@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from "react"
 import { COLOR_WHEEL_IDS, COPIC_COLORS } from "../../utils/colors"
 import gsap from "gsap"
 import { useGSAP } from "@gsap/react"
+import { useCanvasStore } from "../../stores/canvasStore"
 
 const SIZE = 700
 const DPR = Math.min(window.devicePixelRatio || 1, 2)
@@ -25,7 +26,9 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   const centerPathRef = useRef<Path2D>(new Path2D())
 
   const [isOpen, setIsOpen] = useState(false)
-  const [selectedColor, setSelectedColor] = useState<string | null>(null)
+
+  const activeColor = useCanvasStore((state) => state.ui.activeColor)
+  const setActiveColor = useCanvasStore((state) => state.setActiveColor)
 
   const rotationRef = useRef(0)
   const velocityRef = useRef(0)
@@ -67,9 +70,9 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
       ctx.fillStyle = swatch.color
       ctx.fill(swatch.path)
 
-      if (swatch.color === selectedColor) {
-        ctx.strokeStyle = "white"
-        ctx.lineWidth = 4
+      if (swatch.color.toLowerCase() === activeColor?.toLowerCase()) {
+        ctx.strokeStyle = "black"
+        ctx.lineWidth = 2
         ctx.stroke(swatch.path)
       } else {
         ctx.strokeStyle = "rgba(255, 255, 255, 0.15)"
@@ -92,7 +95,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     ctx.font = "bold 12px sans-serif"
     ctx.fillText(isOpen ? "CLOSE" : "COLORS", SIZE / 2, SIZE / 2)
     ctx.restore()
-  }, [isOpen, selectedColor])
+  }, [isOpen, activeColor])
 
   const updateInertia = useCallback(() => {
     if (!isDraggingRef.current && Math.abs(velocityRef.current) > 0.001) {
@@ -124,23 +127,38 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     return { x: SIZE / 2 + (dx * cos - dy * sin), y: SIZE / 2 + (dx * sin + dy * cos) }
   }
 
+  const handleCenterClick = () => {
+    if (!isOpen) {
+      setIsOpen(true)
+      toggleWheel(true)
+    }
+  }
+
   const handlePointerDown = (e: React.PointerEvent) => {
+    if (!isOpen) return
+
     const { x, y } = getCanvasCoords(e.clientX, e.clientY)
     isTouchRef.current = e.pointerType === "touch"
 
     if (hitTestCtxRef.current!.isPointInPath(centerPathRef.current, x, y)) {
-      const next = !isOpen
-      setIsOpen(next)
-      toggleWheel(next)
+      setIsOpen(false)
+      toggleWheel(false)
       return
     }
 
-    if (isOpen) {
-      isDraggingRef.current = true
-      velocityRef.current = 0
-      cancelAnimationFrame(rafRef.current)
-      lastMouseAngleRef.current = getMouseAngle(e.clientX, e.clientY)
+    const clickedSwatch = swatchesRef.current.find((s) =>
+      hitTestCtxRef.current!.isPointInPath(s.path, x, y),
+    )
+    if (clickedSwatch) {
+      setActiveColor(clickedSwatch.color)
+      if (onChange) onChange(clickedSwatch.color)
+      return
     }
+
+    isDraggingRef.current = true
+    velocityRef.current = 0
+    cancelAnimationFrame(rafRef.current)
+    lastMouseAngleRef.current = getMouseAngle(e.clientX, e.clientY)
   }
 
   const handlePointerMove = contextSafe((e: React.PointerEvent) => {
@@ -224,6 +242,10 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     return () => window.removeEventListener("mousedown", handleOutside)
   }, [isOpen])
 
+  useEffect(() => {
+    redrawCanvas()
+  }, [activeColor, redrawCanvas])
+
   useGSAP(() => {
     const hitCanvas = document.createElement("canvas")
     hitCanvas.width = SIZE
@@ -274,15 +296,39 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   }, [])
 
   return (
-    <canvas
-      ref={canvasRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-      className="touch-none select-none cursor-pointer rounded-full bg-transparent fixed top-0 left-0 z-50"
+    <div
+      className="fixed top-0 left-0 z-50 pointer-events-none"
       style={{ width: SIZE, height: SIZE, transform: "translate(-50%, -50%)" }}
-    />
+    >
+      {!isOpen && (
+        <div
+          className="absolute top-1/2 left-1/2 cursor-pointer pointer-events-auto"
+          style={{
+            width: CENTER_RADIUS * 2,
+            height: CENTER_RADIUS * 2,
+            transform: "translate(-50%, -50%)",
+            borderRadius: "50%",
+          }}
+          onClick={handleCenterClick}
+        />
+      )}
+
+      <canvas
+        ref={canvasRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        className="touch-none select-none absolute top-1/2 left-1/2 bg-transparent"
+        style={{
+          width: SIZE,
+          height: SIZE,
+          transform: "translate(-50%, -50%)",
+          pointerEvents: isOpen ? "auto" : "none",
+          cursor: isOpen ? "grab" : "default",
+        }}
+      />
+    </div>
   )
 }
 
