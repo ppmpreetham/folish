@@ -1,4 +1,4 @@
-import React, { FC, memo, useEffect, useMemo, useRef, useState } from "react"
+import React, { type FC, memo, useEffect, useMemo, useRef, useState } from "react"
 import clsx from "clsx"
 import { useShallow } from "zustand/react/shallow"
 import {
@@ -16,42 +16,46 @@ import {
   EyeSlash,
 } from "phosphor-react"
 import { useCanvasStore } from "../../stores/canvasStore"
-import { Layer, Stroke } from "../../types"
-
-// const getLayerBounds = (strokes: Stroke[]) => {
-//   if (strokes.length === 0) return { x: 0, y: 0, width: 100, height: 100 }
-//   let minX = Infinity,
-//     minY = Infinity,
-//     maxX = -Infinity,
-//     maxY = -Infinity
-//   strokes.forEach((stroke) => {
-//     stroke.points.forEach((p) => {
-//       if (p.x < minX) minX = p.x
-//       if (p.y < minY) minY = p.y
-//       if (p.x > maxX) maxX = p.x
-//       if (p.y > maxY) maxY = p.y
-//     })
-//   })
-//   const width = maxX - minX
-//   const height = maxY - minY
-//   const padding = Math.max(width, height) * 0.1
-//   return {
-//     x: minX - padding,
-//     y: minY - padding,
-//     width: width + padding * 2,
-//     height: height + padding * 2,
-//   }
-// }
+import type { Layer } from "../../types"
 
 const LayerThumbnail = memo(({ layerId }: { layerId: string }) => {
   const layer = useCanvasStore((state) => state.doc.layers.find((l) => l.id === layerId))
   const strokes = useCanvasStore(useShallow((state) => state.getStrokesByLayer(layerId)))
   const color = useCanvasStore((state) => state.ui.activeColor)
 
-  const bounds = layer?.bounds || { x: 0, y: 0, width: 100, height: 100 }
-
   if (strokes.length === 0) {
     return <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded opacity-50" />
+  }
+
+  let bounds = layer?.bounds
+
+  if (!bounds && strokes.length > 0) {
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity
+
+    strokes.forEach((stroke) => {
+      if (stroke.bounds) {
+        minX = Math.min(minX, stroke.bounds.x)
+        minY = Math.min(minY, stroke.bounds.y)
+        maxX = Math.max(maxX, stroke.bounds.x + stroke.bounds.width)
+        maxY = Math.max(maxY, stroke.bounds.y + stroke.bounds.height)
+      }
+    })
+
+    if (minX !== Infinity) {
+      bounds = {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+      }
+    }
+  }
+
+  if (!bounds || bounds.width === 0 || bounds.height === 0) {
+    bounds = { x: 0, y: 0, width: 100, height: 100 }
   }
 
   const padding = Math.max(bounds.width, bounds.height) * 0.1
@@ -235,7 +239,7 @@ const SingleLayer = ({
           "relative flex flex-row gap-3 items-center p-2 rounded-lg cursor-pointer transition-all duration-200 border group select-none",
           isActive
             ? "bg-blue-50/50 border-blue-200 shadow-sm"
-            : "bg-white border-transparent hover:bg-gray-50 hover:border-gray-200"
+            : "bg-white border-transparent hover:bg-gray-50 hover:border-gray-200",
         )}
         onClick={() => setActiveLayer(layer.id)}
         onContextMenu={handleContextMenu}
@@ -247,7 +251,7 @@ const SingleLayer = ({
           }}
           className={clsx(
             "p-1.5 rounded-md transition-colors",
-            layer.visible ? "text-gray-500 hover:text-gray-900" : "text-gray-300"
+            layer.visible ? "text-gray-500 hover:text-gray-900" : "text-gray-300",
           )}
         >
           {layer.visible ? <Eye size={18} /> : <EyeSlash size={18} />}
@@ -262,7 +266,7 @@ const SingleLayer = ({
             ref={inputRef}
             className={clsx(
               "text-sm font-medium bg-transparent border-none p-0 focus:ring-0 w-full truncate cursor-pointer",
-              isActive ? "text-gray-900" : "text-gray-600"
+              isActive ? "text-gray-900" : "text-gray-600",
             )}
             value={layer.name}
             onChange={(e) => renameLayer(layer.id, e.target.value)}
