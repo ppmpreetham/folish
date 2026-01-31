@@ -4,6 +4,7 @@ import { produceWithPatches, applyPatches, enablePatches, Patch } from "immer"
 import type { Stroke, Layer, Camera, Tool, Point, CanvasState, UIState, Bounds } from "../types"
 import { calculateStrokeBounds, expandBounds, mergeBounds } from "../utils/bounds"
 import { SpatialIndex } from "../utils/spatialIndex"
+import { encodePoints, decodePoints } from "../utils/b64"
 
 enablePatches()
 
@@ -148,7 +149,11 @@ export const useCanvasStore = create<CanvasStore>()(
         addStroke: (stroke) => {
           const rawBounds = calculateStrokeBounds(stroke.points)
           const strokeBounds = expandBounds(rawBounds, stroke.width * 2)
-          const strokeWithBounds = { ...stroke, bounds: strokeBounds }
+          const strokeWithBounds = {
+            ...stroke,
+            bounds: strokeBounds,
+            pointsCompressed: encodePoints(stroke.points),
+          }
 
           get().execute((draft) => {
             draft.strokes[stroke.id] = strokeWithBounds
@@ -379,15 +384,35 @@ export const useCanvasStore = create<CanvasStore>()(
       {
         name: "folish-storage",
         partialize: (state) => ({
-          doc: state.doc,
+          doc: {
+            ...state.doc,
+            strokes: Object.fromEntries(
+              Object.entries(state.doc.strokes).map(([id, stroke]) => {
+                const { points, ...rest } = stroke
+                return [
+                  id,
+                  {
+                    ...rest,
+                    pointsCompressed: stroke.pointsCompressed || encodePoints(stroke.points),
+                  },
+                ]
+              }),
+            ),
+          },
         }),
-        version: 1,
+        version: 2,
 
         onRehydrateStorage: () => (state) => {
           if (state) {
+            Object.values(state.doc.strokes).forEach((stroke) => {
+              if (stroke.pointsCompressed && !stroke.points) {
+                stroke.points = decodePoints(stroke.pointsCompressed)
+              }
+            })
+
             state.spatialIndex = new SpatialIndex()
             state.rebuildSpatialIndex()
-            console.log("🔄 Spatial index rebuilt after storage rehydration")
+            console.log("🔄 Spatial index rebuilt and points decompressed")
           }
         },
       },

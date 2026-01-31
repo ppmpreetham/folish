@@ -2,6 +2,7 @@ import { memo, useMemo } from "react"
 import { useCanvasStore } from "../../stores/canvasStore"
 import { getViewportBounds } from "../../utils/bounds"
 import { SpatialIndexStats } from "../Debug/SpatialIndexStats"
+import { decodePoints } from "../../utils/b64"
 
 export const Renderer = memo(() => {
   const layers = useCanvasStore((state) => state.doc.layers)
@@ -12,16 +13,12 @@ export const Renderer = memo(() => {
   const viewport = useMemo(() => {
     const width = window.innerWidth
     const height = window.innerHeight
-    const vp = getViewportBounds(camera, { width, height })
-    console.log("📐 Viewport:", vp)
-    return vp
+    return getViewportBounds(camera, { width, height })
   }, [camera.x, camera.y, camera.zoom])
 
   const visibleStrokesMap = useMemo(() => {
     return queryVisibleStrokes(viewport)
   }, [viewport, queryVisibleStrokes, strokes])
-
-  console.log("🎨 Rendering", layers.length, "layers")
 
   return (
     <>
@@ -32,13 +29,15 @@ export const Renderer = memo(() => {
         const layerVisibleIds = visibleStrokesMap[layer.id] || []
         if (layerVisibleIds.length === 0) return null
 
-        console.log("📄 Layer", layer.name, "- Strokes:", layer.strokeIds.length)
-
         return (
           <g key={layer.id} style={{ opacity: layer.opacity }}>
             {layerVisibleIds.map((strokeId) => {
               const stroke = strokes[strokeId]
               if (!stroke) return null
+
+              const points =
+                stroke.points ||
+                (stroke.pointsCompressed ? decodePoints(stroke.pointsCompressed) : [])
 
               return (
                 <path
@@ -46,6 +45,7 @@ export const Renderer = memo(() => {
                   d={stroke.pathData}
                   fill={stroke.color}
                   opacity={stroke.opacity}
+                  strokeWidth={0}
                 />
               )
             })}

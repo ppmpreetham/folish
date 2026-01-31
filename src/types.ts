@@ -14,6 +14,7 @@ export interface Bounds {
 export interface Stroke {
   id: string
   points: Point[]
+  pointsCompressed?: string
   pathData?: string
   layerId: string
   color: string
@@ -43,7 +44,7 @@ export interface Camera {
 
 export interface CanvasState {
   layers: Layer[]
-  strokes: Record<string, Stroke> // id -> stroke
+  strokes: Record<string, Stroke>
 }
 
 export type Tool = "pen" | "eraser" | "pan" | "select"
