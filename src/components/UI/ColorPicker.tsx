@@ -89,7 +89,12 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   const [isSliderOpen, setIsSliderOpen] = useState(false);
 
   const activeColor = useCanvasStore((state) => state.ui.activeColor);
+  const activeTool = useCanvasStore((state) => state.ui.activeTool);
   const setActiveColor = useCanvasStore((state) => state.setActiveColor);
+  const setActiveTool = useCanvasStore((state) => state.setActiveTool);
+  const setActiveBrush = useCanvasStore((state) => state.setActiveBrush);
+  const undo = useCanvasStore((state) => state.undo);
+  const redo = useCanvasStore((state) => state.redo);
   const sidebarOpen = useCanvasStore((state) => state.ui.sidebarOpen);
   const setSidebarOpen = useCanvasStore((state) => state.setSidebarOpen);
   const setEditingOption = useCanvasStore((state) => state.setEditingOption);
@@ -101,6 +106,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   const setActiveOpacity = useCanvasStore((state) => state.setActiveOpacity);
   const activeSmooth = useCanvasStore((state) => state.ui.activeSmooth);
   const setActiveSmooth = useCanvasStore((state) => state.setActiveSmooth);
+  const canPickColors = activeTool === "pen";
 
   const isOpenRef = useRef(isOpen);
   const sidebarOpenRef = useRef(sidebarOpen);
@@ -116,7 +122,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   const isTouchRef = useRef(false);
   const lastMouseAngleRef = useRef(0);
   const rafRef = useRef<number>(0);
-  const lastClickTimeRef = useRef<number>(0);
+  const lastOuterClickRef = useRef({ id: -1, time: 0 });
 
   const { contextSafe } = useGSAP();
 
@@ -364,13 +370,16 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     [contextSafe, redrawCanvas],
   );
 
+  useEffect(() => {
+    if (canPickColors) return;
+    setIsOpen(false);
+    setIsSliderOpen(false);
+    toggleWheel(false);
+  }, [canPickColors, toggleWheel]);
+
   const handlePointerDown = (e: React.PointerEvent) => {
     const { unrotated, rotated } = getMouseCoords(e.clientX, e.clientY);
     isTouchRef.current = e.pointerType === "touch";
-
-    const now = Date.now();
-    const isDoubleClick = now - lastClickTimeRef.current < 300;
-    lastClickTimeRef.current = now;
 
     pointerDownOnCoreRef.current = false;
     const isCore = hitTestCtxRef.current!.isPointInPath(
@@ -380,6 +389,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     );
 
     if (isCore) {
+      if (!canPickColors) return;
       pointerDownOnCoreRef.current = true;
       setIsSliderOpen(false);
 
@@ -414,12 +424,29 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
           }
         } else {
           activeOuterRef.current = seg.id;
+          const now = Date.now();
+          const isDoubleClick =
+            lastOuterClickRef.current.id === seg.id && now - lastOuterClickRef.current.time < 300;
+          lastOuterClickRef.current = { id: seg.id, time: now };
 
-          const isValidToolSlot = seg.id !== 7 && seg.id !== 8;
-          if (isValidToolSlot) {
+          if (seg.id === 7) {
+            undo();
+          } else if (seg.id === 8) {
+            redo();
+          } else {
             if (isDoubleClick || sidebarOpenRef.current) {
               setEditingOption(seg.id);
               setSidebarOpen(true);
+            } else {
+              const assignment = toolSlots[seg.id];
+              if (!assignment) return;
+              if (assignment.type === "brush") {
+                setActiveBrush(assignment.id);
+                setActiveTool("pen");
+              } else if (assignment.type === "tool") {
+                const tool = TOOLS.find((item) => item.id === assignment.id);
+                if (tool) setActiveTool(tool.id);
+              }
             }
           }
         }
@@ -539,12 +566,12 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
 
   const handleWheel = useCallback(
     (e: WheelEvent) => {
-      if (!isOpenRef.current) return;
+      if (!isOpenRef.current || !canPickColors) return;
       e.preventDefault();
       rotationRef.current += e.deltaY * 0.002;
       redrawCanvas();
     },
-    [redrawCanvas],
+    [canPickColors, redrawCanvas],
   );
 
   useEffect(() => {
@@ -859,8 +886,8 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
             width: SIZE,
             height: SIZE,
             transform: "translate(-50%, -50%)",
-            pointerEvents: isOpen ? "auto" : "none",
-            cursor: isOpen ? "grab" : "default",
+            pointerEvents: isOpen && canPickColors ? "auto" : "none",
+            cursor: isOpen && canPickColors ? "grab" : "default",
             transition: "opacity 0.3s ease-in-out",
           }}
         />

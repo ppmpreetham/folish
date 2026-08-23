@@ -121,3 +121,8 @@ export const TOOLS: ToolItem[] = [
   { id: "rotate", name: "Rotate", toolFunction: "rotate", logo: ArrowClockwise },
   { id: "zoom", name: "Zoom", toolFunction: "zoom", logo: MagnifyingGlass },
 ]
+
+const TOOL_FUNCTIONS_BY_ID = new Map(TOOLS.map((tool) => [tool.id, tool.toolFunction]))
+
+export const hasToolFunction = (toolId: string, toolFunction: string) =>
+  TOOL_FUNCTIONS_BY_ID.get(toolId) === toolFunction

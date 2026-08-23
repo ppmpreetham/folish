@@ -1,7 +1,7 @@
 import { useCanvasStore } from "../../stores/canvasStore"
-import { useMemo } from "react"
+import { memo, useMemo } from "react"
 
-export const SpatialIndexStats = () => {
+export const SpatialIndexStats = memo(() => {
   const spatialIndex = useCanvasStore((state) => state.spatialIndex)
   const strokes = useCanvasStore((state) => state.doc.strokes)
   const camera = useCanvasStore((state) => state.ui.camera)
@@ -41,4 +41,4 @@ export const SpatialIndexStats = () => {
       <div>Tree Depth: {stats.treeDepth}</div>
     </div>
   )
-}
+})

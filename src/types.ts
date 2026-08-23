@@ -23,6 +23,22 @@ export interface Stroke {
   tool: Tool
   timestamp: number
   bounds?: Bounds
+  offset?: { x: number; y: number }
+}
+
+export interface TextShape {
+  id: string
+  layerId: string
+  x: number
+  y: number
+  width: number
+  height: number
+  text: string
+  color: string
+  opacity: number
+  timestamp: number
+  bounds: Bounds
+  offset?: { x: number; y: number }
 }
 
 export interface Layer {
@@ -32,6 +48,7 @@ export interface Layer {
   locked: boolean
   opacity: number
   strokeIds: string[]
+  textIds?: string[]
   bounds?: Bounds
 }
 
@@ -45,15 +62,13 @@ export interface Camera {
 export interface CanvasState {
   layers: Layer[]
   strokes: Record<string, Stroke>
+  texts: Record<string, TextShape>
 }
 
 export type Tool = string;
 
-export interface SelectionBox {
-  x: number
-  y: number
-  width: number
-  height: number
+export interface SelectionLasso {
+  points: Array<Pick<Point, "x" | "y">>
 }
 
 export interface SlotAssignment {
@@ -75,6 +90,9 @@ export interface UIState {
   activeBrush: string
   activeSmooth: number
   toolSlots: Record<number, SlotAssignment>
+  selectedStrokeIds: string[]
+  selectionLasso: SelectionLasso | null
+  selectionTranslation: { x: number; y: number }
 }
 
 export interface SimpleUIState {

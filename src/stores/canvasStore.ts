@@ -1,7 +1,18 @@
 import { create } from "zustand"
 import { devtools, persist } from "zustand/middleware"
 import { produceWithPatches, applyPatches, enablePatches, Patch } from "immer"
-import type { Stroke, Layer, Camera, Tool, Point, CanvasState, UIState, Bounds } from "../types"
+import type {
+  Stroke,
+  Layer,
+  Camera,
+  Tool,
+  Point,
+  CanvasState,
+  UIState,
+  Bounds,
+  SelectionLasso,
+  TextShape,
+} from "../types"
 import { calculateStrokeBounds, expandBounds, mergeBounds } from "../utils/bounds"
 import { SpatialIndex } from "../utils/spatialIndex"
 import { encodePoints, decodePoints } from "../utils/b64"
@@ -33,10 +44,16 @@ interface CanvasStore {
   setActiveWidth: (width: number) => void
   setActiveLayer: (id: string) => void
   setLayerOpacityTransient: (id: string, opacity: number) => void
+  setSelectedStrokes: (ids: string[]) => void
+  setSelectionLasso: (lasso: SelectionLasso | null) => void
+  setSelectionTranslation: (translation: { x: number; y: number }) => void
 
   execute: (recipe: (draft: CanvasState) => void) => void
   addStroke: (stroke: Stroke) => void
+  addText: (text: Omit<TextShape, "id" | "bounds" | "timestamp">) => void
+  updateText: (id: string, text: Pick<TextShape, "text" | "width" | "height">) => void
   updateStrokePoints: (id: string, points: Point[]) => void
+  translateStrokes: (ids: string[], dx: number, dy: number) => void
   deleteStrokes: (ids: string[]) => void
 
   addLayer: (name: string) => void
@@ -77,10 +94,12 @@ const initialDoc: CanvasState = {
       locked: false,
       opacity: 1,
       strokeIds: [],
+      textIds: [],
       bounds: undefined,
     },
   ],
   strokes: {},
+  texts: {},
 }
 
 const initialUI: UIState = {
@@ -100,10 +119,45 @@ const initialUI: UIState = {
     0: { type: "brush", id: "pen" },
     1: { type: "brush", id: "marker" },
     2: { type: "tool", id: "selection" },
+    3: { type: "tool", id: "text" },
+    4: { type: "tool", id: "nudge" },
+    5: { type: "tool", id: "pan" },
+    6: { type: "brush", id: "fountain" },
+    9: { type: "brush", id: "dynamic-pen" },
   },
+  selectedStrokeIds: [],
+  selectionLasso: null,
+  selectionTranslation: { x: 0, y: 0 },
 }
 
 const MAX_HISTORY = 50
+
+const selectionEquals = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((id, index) => id === b[index])
+
+const selectionLassoEquals = (a: SelectionLasso | null, b: SelectionLasso | null) =>
+  a === b ||
+  (!!a && !!b && a.points.length === b.points.length && a.points.every((point, index) =>
+    point.x === b.points[index].x && point.y === b.points[index].y,
+  ))
+
+const recalculateLayerBounds = (doc: CanvasState, layerId: string) => {
+  const layer = doc.layers.find((candidate) => candidate.id === layerId)
+  if (!layer) return
+
+  let nextBounds: Bounds | undefined
+  for (const strokeId of layer.strokeIds) {
+    const bounds = doc.strokes[strokeId]?.bounds
+    if (!bounds) continue
+    nextBounds = nextBounds ? mergeBounds(nextBounds, bounds) : bounds
+  }
+  for (const textId of layer.textIds ?? []) {
+    const bounds = doc.texts[textId]?.bounds
+    if (!bounds) continue
+    nextBounds = nextBounds ? mergeBounds(nextBounds, bounds) : bounds
+  }
+  layer.bounds = nextBounds
+}
 
 export const useCanvasStore = create<CanvasStore>()(
   devtools(
@@ -138,7 +192,7 @@ export const useCanvasStore = create<CanvasStore>()(
             Object.keys(doc.strokes).length,
             "strokes",
           )
-          spatialIndex.buildFromStrokes(doc.strokes)
+          spatialIndex.buildFromStrokes(doc.strokes, doc.texts)
         },
 
         setCamera: (camera) => set((state) => ({ ui: { ...state.ui, camera } })),
@@ -148,6 +202,20 @@ export const useCanvasStore = create<CanvasStore>()(
           set((state) => ({ ui: { ...state.ui, activeOpacity: opacity } })),
         setActiveWidth: (width) => set((state) => ({ ui: { ...state.ui, activeWidth: width } })),
         setActiveLayer: (id) => set((state) => ({ ui: { ...state.ui, activeLayerId: id } })),
+        setSelectedStrokes: (ids) => {
+          const nextIds = Array.from(new Set(ids))
+          if (selectionEquals(get().ui.selectedStrokeIds, nextIds)) return
+          set((state) => ({ ui: { ...state.ui, selectedStrokeIds: nextIds } }))
+        },
+        setSelectionLasso: (lasso) => {
+          if (selectionLassoEquals(get().ui.selectionLasso, lasso)) return
+          set((state) => ({ ui: { ...state.ui, selectionLasso: lasso } }))
+        },
+        setSelectionTranslation: (translation) => {
+          const current = get().ui.selectionTranslation
+          if (current.x === translation.x && current.y === translation.y) return
+          set((state) => ({ ui: { ...state.ui, selectionTranslation: translation } }))
+        },
 
         setLayerOpacityTransient: (id: string, opacity: number) =>
           set((state) => {
@@ -214,6 +282,100 @@ export const useCanvasStore = create<CanvasStore>()(
           get().spatialIndex.insert(id, stroke.layerId, newBounds)
         },
 
+        addText: (text) => {
+          const id = crypto.randomUUID()
+          const bounds = { x: text.x, y: text.y, width: text.width, height: text.height }
+          const textShape: TextShape = { ...text, id, bounds, timestamp: Date.now() }
+
+          get().execute((draft) => {
+            draft.texts[id] = textShape
+            const layer = draft.layers.find((candidate) => candidate.id === text.layerId)
+            if (!layer) return
+            ;(layer.textIds ??= []).push(id)
+            layer.bounds = layer.bounds ? mergeBounds(layer.bounds, bounds) : bounds
+          })
+          get().spatialIndex.insert(id, text.layerId, bounds)
+          get().setSelectedStrokes([id])
+        },
+
+        updateText: (id, next) => {
+          const text = get().doc.texts[id]
+          if (!text) return
+          if (text.text === next.text && text.width === next.width && text.height === next.height) return
+          const bounds = { ...text.bounds, width: next.width, height: next.height }
+          get().execute((draft) => {
+            const draftText = draft.texts[id]
+            if (!draftText) return
+            draftText.text = next.text
+            draftText.width = next.width
+            draftText.height = next.height
+            draftText.bounds = bounds
+            recalculateLayerBounds(draft, draftText.layerId)
+          })
+          get().spatialIndex.remove(id)
+          get().spatialIndex.insert(id, text.layerId, bounds)
+        },
+
+        translateStrokes: (ids, dx, dy) => {
+          if (ids.length === 0 || (dx === 0 && dy === 0)) return
+
+          const movedStrokes = ids
+            .map((id) => get().doc.strokes[id])
+            .filter((stroke): stroke is Stroke => !!stroke && !!stroke.bounds)
+          const movedTexts = ids
+            .map((id) => get().doc.texts[id])
+            .filter((text): text is TextShape => !!text)
+          if (movedStrokes.length === 0 && movedTexts.length === 0) return
+
+          const affectedLayerIds = new Set([
+            ...movedStrokes.map((stroke) => stroke.layerId),
+            ...movedTexts.map((text) => text.layerId),
+          ])
+
+          get().execute((draft) => {
+            for (const stroke of movedStrokes) {
+              const draftStroke = draft.strokes[stroke.id]
+              if (!draftStroke?.bounds) continue
+              draftStroke.offset = {
+                x: (draftStroke.offset?.x ?? 0) + dx,
+                y: (draftStroke.offset?.y ?? 0) + dy,
+              }
+              draftStroke.bounds = {
+                ...draftStroke.bounds,
+                x: draftStroke.bounds.x + dx,
+                y: draftStroke.bounds.y + dy,
+              }
+            }
+            for (const text of movedTexts) {
+              const draftText = draft.texts[text.id]
+              if (!draftText) continue
+              draftText.offset = {
+                x: (draftText.offset?.x ?? 0) + dx,
+                y: (draftText.offset?.y ?? 0) + dy,
+              }
+              draftText.bounds = {
+                ...draftText.bounds,
+                x: draftText.bounds.x + dx,
+                y: draftText.bounds.y + dy,
+              }
+            }
+            affectedLayerIds.forEach((layerId) => recalculateLayerBounds(draft, layerId))
+          })
+
+          for (const stroke of movedStrokes) {
+            const nextBounds = get().doc.strokes[stroke.id]?.bounds
+            if (!nextBounds) continue
+            get().spatialIndex.remove(stroke.id)
+            get().spatialIndex.insert(stroke.id, stroke.layerId, nextBounds)
+          }
+          for (const text of movedTexts) {
+            const nextBounds = get().doc.texts[text.id]?.bounds
+            if (!nextBounds) continue
+            get().spatialIndex.remove(text.id)
+            get().spatialIndex.insert(text.id, text.layerId, nextBounds)
+          }
+        },
+
         queryVisibleStrokesByLayer: (viewport) => {
           return get().spatialIndex.query(viewport)
         },
@@ -226,27 +388,20 @@ export const useCanvasStore = create<CanvasStore>()(
           get().execute((draft) => {
             ids.forEach((id) => {
               delete draft.strokes[id]
+              delete draft.texts[id]
             })
 
             draft.layers.forEach((layer) => {
               layer.strokeIds = layer.strokeIds.filter((sid) => !ids.includes(sid))
+              layer.textIds = (layer.textIds ?? []).filter((textId) => !ids.includes(textId))
 
-              if (layer.strokeIds.length === 0) {
-                layer.bounds = undefined
-              } else {
-                const strokes = layer.strokeIds
-                  .map((id) => draft.strokes[id])
-                  .filter((s) => s?.bounds)
-
-                if (strokes.length > 0) {
-                  layer.bounds = strokes.reduce(
-                    (acc, stroke) => mergeBounds(acc, stroke.bounds!),
-                    strokes[0].bounds!,
-                  )
-                }
-              }
+              recalculateLayerBounds(draft, layer.id)
             })
           })
+
+          get().setSelectedStrokes(
+            get().ui.selectedStrokeIds.filter((selectedId) => !ids.includes(selectedId)),
+          )
         },
 
         addLayer: (name) => {
@@ -259,6 +414,7 @@ export const useCanvasStore = create<CanvasStore>()(
               locked: false,
               opacity: 1,
               strokeIds: [],
+              textIds: [],
               bounds: undefined,
             })
           })
@@ -270,7 +426,7 @@ export const useCanvasStore = create<CanvasStore>()(
 
           const layer = get().doc.layers.find((l) => l.id === id)
           if (layer) {
-            get().spatialIndex.removeBatch(layer.strokeIds)
+            get().spatialIndex.removeBatch([...layer.strokeIds, ...(layer.textIds ?? [])])
           }
 
           get().execute((draft) => {
@@ -278,6 +434,9 @@ export const useCanvasStore = create<CanvasStore>()(
             if (layer) {
               layer.strokeIds.forEach((sid) => {
                 delete draft.strokes[sid]
+              })
+              ;(layer.textIds ?? []).forEach((textId) => {
+                delete draft.texts[textId]
               })
             }
             draft.layers = draft.layers.filter((l) => l.id !== id)
@@ -361,6 +520,8 @@ export const useCanvasStore = create<CanvasStore>()(
           const newLayerId = crypto.randomUUID()
           const newStrokeIds: string[] = []
           const newStrokesMap: Record<string, Stroke> = {}
+          const newTextIds: string[] = []
+          const newTextsMap: Record<string, TextShape> = {}
 
           sourceLayer.strokeIds.forEach((strokeId) => {
             const sourceStroke = get().doc.strokes[strokeId]
@@ -375,6 +536,14 @@ export const useCanvasStore = create<CanvasStore>()(
             }
           })
 
+          ;(sourceLayer.textIds ?? []).forEach((textId) => {
+            const sourceText = get().doc.texts[textId]
+            if (!sourceText) return
+            const newTextId = crypto.randomUUID()
+            newTextsMap[newTextId] = { ...sourceText, id: newTextId, layerId: newLayerId }
+            newTextIds.push(newTextId)
+          })
+
           get().execute((draft) => {
             const index = draft.layers.findIndex((l) => l.id === id)
             if (index === -1) return
@@ -382,12 +551,16 @@ export const useCanvasStore = create<CanvasStore>()(
             Object.entries(newStrokesMap).forEach(([id, stroke]) => {
               draft.strokes[id] = stroke
             })
+            Object.entries(newTextsMap).forEach(([id, text]) => {
+              draft.texts[id] = text
+            })
 
             const newLayer: Layer = {
               ...sourceLayer,
               id: newLayerId,
               name: `${sourceLayer.name} (Copy)`,
               strokeIds: newStrokeIds,
+              textIds: newTextIds,
               bounds: sourceLayer.bounds,
             }
 
@@ -398,6 +571,9 @@ export const useCanvasStore = create<CanvasStore>()(
             if (stroke.bounds) {
               get().spatialIndex.insert(id, stroke.layerId, stroke.bounds)
             }
+          })
+          Object.entries(newTextsMap).forEach(([id, text]) => {
+            get().spatialIndex.insert(id, text.layerId, text.bounds)
           })
         },
 
@@ -494,6 +670,10 @@ export const useCanvasStore = create<CanvasStore>()(
 
         onRehydrateStorage: () => (state) => {
           if (state) {
+            state.doc.texts ??= {}
+            state.doc.layers.forEach((layer) => {
+              layer.textIds ??= []
+            })
             Object.values(state.doc.strokes).forEach((stroke) => {
               if (stroke.pointsCompressed && !stroke.points) {
                 stroke.points = decodePoints(stroke.pointsCompressed)

@@ -31,9 +31,12 @@ const ICON_CONTEXT_VALUE = {
 const LayerThumbnail = memo(({ layerId }: { layerId: string }) => {
   const layer = useCanvasStore((state) => state.doc.layers.find((l) => l.id === layerId));
   const strokes = useCanvasStore(useShallow((state) => state.getStrokesByLayer(layerId)));
+  const texts = useCanvasStore((state) => state.doc.texts);
   const color = useCanvasStore((state) => state.ui.activeColor);
 
-  if (strokes.length === 0) {
+  const layerTexts = (layer?.textIds ?? []).map((id) => texts[id]).filter(Boolean);
+
+  if (strokes.length === 0 && layerTexts.length === 0) {
     return <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded opacity-50" />;
   }
 
@@ -82,7 +85,30 @@ const LayerThumbnail = memo(({ layerId }: { layerId: string }) => {
             d={stroke.pathData}
             fill={stroke.color || color}
             opacity={stroke.opacity}
+            transform={
+              stroke.offset?.x || stroke.offset?.y
+                ? `translate(${stroke.offset.x} ${stroke.offset.y})`
+                : undefined
+            }
           />
+        ))}
+        {layerTexts.map((text) => (
+          <text
+            key={text.id}
+            x={text.x}
+            y={text.y + 16}
+            fill={text.color}
+            opacity={text.opacity}
+            fontSize={16}
+            fontFamily="inherit"
+            transform={
+              text.offset?.x || text.offset?.y
+                ? `translate(${text.offset.x} ${text.offset.y})`
+                : undefined
+            }
+          >
+            {text.text.split("\n")[0]}
+          </text>
         ))}
       </svg>
     </div>
@@ -418,6 +444,7 @@ const LayersNew: FC<{ className?: string }> = ({ className }) => {
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT") return;
       if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (useCanvasStore.getState().ui.selectedStrokeIds.length > 0) return;
 
       const selected = listRef.current?.querySelectorAll(".multi-selected");
       if (selected && selected.length > 0) {
