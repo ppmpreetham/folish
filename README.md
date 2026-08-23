@@ -12,11 +12,9 @@
 
 ### What is Folish?
 
-Folish is a **framework-agnostic** digital sketchbook inspired by _Concepts_. It combines the performance of **Rust** with the flexibility of **React** to create a buttery-smooth drawing experience.
+Folish is a digital sketchbook inspired by _Concepts_. It gives you a buttery-smooth drawing experience.
 
-It features an **infinite canvas**, a **perfect-freehand** stroke engine, and a complex **layering system**, all wrapped in a minimal interface designed to keep you in the flow.
-
-### Quick Start
+### Custom Installation
 
 Ensure you have [Node.js](https://www.google.com/search?q=https://nodejs.org/) (v16+) and [Rust](https://www.google.com/search?q=https://www.rust-lang.org/) installed.
 
@@ -32,7 +30,8 @@ pnpm install
 pnpm tauri dev
 ```
 
-> [!TIP] > **Building for Production:**: To create a standalone executable for your OS, run `pnpm tauri build`
+> [!TIP]
+> Building for Production: To create a standalone executable for your OS, run `pnpm tauri build`
 
 ---
 
