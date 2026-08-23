@@ -65,6 +65,8 @@ export interface UIState {
   activeLayerId: string
   showLayersPanel?: boolean
   showPrecisionPanel?: boolean
+  sidebarOpen?: boolean
+  editingOption?: number | null
 }
 
 export interface SimpleUIState {

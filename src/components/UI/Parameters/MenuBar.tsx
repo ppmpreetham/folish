@@ -8,7 +8,7 @@ const MenuBar = () => {
   const togglePrecisionPanel = useCanvasStore((state) => state.togglePrecisionPanel)
 
   return (
-    <div className="flex flex-row fixed top-0 left-0">
+    <div className="flex flex-row fixed top-0 left-0 z-100">
       <IconContext.Provider
         value={{
           size: 36,

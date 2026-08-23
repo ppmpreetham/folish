@@ -55,6 +55,9 @@ interface CanvasStore {
   canRedo: () => boolean
   resetCanvas: () => void
   clearHistory: () => void
+
+  setSidebarOpen: (open: boolean) => void
+  setEditingOption: (option: number | null) => void
 }
 
 const initialDoc: CanvasState = {
@@ -81,6 +84,8 @@ const initialUI: UIState = {
   activeLayerId: "layer-1",
   showLayersPanel: true,
   showPrecisionPanel: true,
+  sidebarOpen: false,
+  editingOption: null,
 }
 
 const MAX_HISTORY = 50
@@ -345,6 +350,14 @@ export const useCanvasStore = create<CanvasStore>()(
 
         togglePrecisionPanel: (visible: boolean) => {
           set((state) => ({ ui: { ...state.ui, showPrecisionPanel: visible } }))
+        },
+
+        setSidebarOpen: (open: boolean) => {
+          set((state) => ({ ui: { ...state.ui, sidebarOpen: open } }))
+        },
+
+        setEditingOption: (option: number | null) => {
+          set((state) => ({ ui: { ...state.ui, editingOption: option } }))
         },
 
         undo: () => {
