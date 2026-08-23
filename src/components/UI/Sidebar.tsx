@@ -7,6 +7,7 @@ const SideBar = () => {
   const editingOption = useCanvasStore((state) => state.ui.editingOption)
   const toolSlots = useCanvasStore((state) => state.ui.toolSlots)
   const setSlotAssignment = useCanvasStore((state) => state.setSlotAssignment)
+  const activeColor = useCanvasStore((state) => state.ui.activeColor)
 
   const currentAssignment = editingOption !== null ? toolSlots[editingOption] : null
 
@@ -27,7 +28,7 @@ const SideBar = () => {
     return (
       <div className="space-y-8">
         <div>
-          <h3 className="text-xl font-bold uppercase tracking-widest mb-4">Basics</h3>
+          <h3 className="text-xl font-bold uppercase tracking-widest mb-4">Brushes</h3>
           <div className="grid grid-cols-2 gap-3">
             {BRUSHES.map((brush) => {
               const Logo = brush.logo
@@ -47,7 +48,7 @@ const SideBar = () => {
                       : "bg-black border-gray-700 hover:border-gray-500 hover:bg-gray-900 text-gray-300"
                   }`}
                 >
-                  <Logo size={24} weight={isActive ? "fill" : "duotone"} />
+                  <Logo size={24} weight={isActive ? "fill" : "duotone"} color={activeColor} />
                   {brush.name}
                 </button>
               )

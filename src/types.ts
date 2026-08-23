@@ -39,6 +39,7 @@ export interface TextShape {
   timestamp: number
   bounds: Bounds
   offset?: { x: number; y: number }
+  rotation?: number
 }
 
 export interface Layer {
@@ -94,6 +95,9 @@ export interface UIState {
   selectionLasso: SelectionLasso | null
   selectionMarquee: Bounds | null
   selectionTranslation: { x: number; y: number }
+  selectionScale: { x: number; y: number }
+  selectionRotation: number
+  selectionTransformOrigin: Pick<Point, "x" | "y"> | null
   nudgePreview: { strokeId: string; pathData: string } | null
 }
 

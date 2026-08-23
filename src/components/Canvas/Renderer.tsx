@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react"
 import { useCanvasStore } from "../../stores/canvasStore"
 import { getViewportBounds } from "../../utils/bounds"
+import { getSvgSelectionTransform } from "../../utils/selectionTransform"
 
 export const Renderer = memo(() => {
   const layers = useCanvasStore((state) => state.doc.layers)
@@ -9,6 +10,9 @@ export const Renderer = memo(() => {
   const camera = useCanvasStore((state) => state.ui.camera)
   const selectedStrokeIds = useCanvasStore((state) => state.ui.selectedStrokeIds)
   const selectionTranslation = useCanvasStore((state) => state.ui.selectionTranslation)
+  const selectionScale = useCanvasStore((state) => state.ui.selectionScale)
+  const selectionRotation = useCanvasStore((state) => state.ui.selectionRotation)
+  const selectionTransformOrigin = useCanvasStore((state) => state.ui.selectionTransformOrigin)
   const nudgePreview = useCanvasStore((state) => state.ui.nudgePreview)
   const queryVisibleStrokes = useCanvasStore((state) => state.queryVisibleStrokes)
 
@@ -23,6 +27,14 @@ export const Renderer = memo(() => {
   }, [viewport, queryVisibleStrokes, strokes, texts])
 
   const selectedStrokeIdSet = useMemo(() => new Set(selectedStrokeIds), [selectedStrokeIds])
+  const selectionTransform = selectionTransformOrigin
+    ? getSvgSelectionTransform({
+        origin: selectionTransformOrigin,
+        translation: selectionTranslation,
+        scale: selectionScale,
+        rotation: selectionRotation,
+      })
+    : undefined
 
   return (
     <>
@@ -41,44 +53,34 @@ export const Renderer = memo(() => {
               if (!stroke) return null
 
               const isMoving = selectedStrokeIdSet.has(stroke.id)
-              const x = (stroke.offset?.x ?? 0) + (isMoving ? selectionTranslation.x : 0)
-              const y = (stroke.offset?.y ?? 0) + (isMoving ? selectionTranslation.y : 0)
+              const x = (stroke.offset?.x ?? 0) + (isMoving && !selectionTransform ? selectionTranslation.x : 0)
+              const y = (stroke.offset?.y ?? 0) + (isMoving && !selectionTransform ? selectionTranslation.y : 0)
               const pathData = nudgePreview?.strokeId === stroke.id ? nudgePreview.pathData : stroke.pathData
 
-              return (
-                <path
-                  key={stroke.id}
-                  d={pathData}
-                  fill={stroke.color}
-                  opacity={stroke.opacity}
-                  strokeWidth={0}
-                  transform={x || y ? `translate(${x} ${y})` : undefined}
-                />
-              )
+              const path = <path d={pathData} fill={stroke.color} opacity={stroke.opacity} strokeWidth={0} transform={x || y ? `translate(${x} ${y})` : undefined} />
+              return isMoving && selectionTransform ? <g key={stroke.id} transform={selectionTransform}>{path}</g> : <g key={stroke.id}>{path}</g>
             })}
             {(layer.textIds ?? []).filter((id) => visibleSet.has(id)).map((textId) => {
               const text = texts[textId]
               if (!text) return null
               const isMoving = selectedStrokeIdSet.has(text.id)
-              const x = (text.offset?.x ?? 0) + (isMoving ? selectionTranslation.x : 0)
-              const y = (text.offset?.y ?? 0) + (isMoving ? selectionTranslation.y : 0)
+              const x = (text.offset?.x ?? 0) + (isMoving && !selectionTransform ? selectionTranslation.x : 0)
+              const y = (text.offset?.y ?? 0) + (isMoving && !selectionTransform ? selectionTranslation.y : 0)
+              const textRotation = text.rotation ?? 0
+              const textTransform = [
+                x || y ? `translate(${x} ${y})` : "",
+                textRotation ? `rotate(${textRotation} ${text.x + text.width / 2} ${text.y + text.height / 2})` : "",
+              ].filter(Boolean).join(" ") || undefined
               return (
-                <text
-                  key={text.id}
-                  x={text.x}
-                  y={text.y + 16}
-                  fill={text.color}
-                  opacity={text.opacity}
-                  fontSize={16}
-                  fontFamily="inherit"
-                  transform={x || y ? `translate(${x} ${y})` : undefined}
-                >
+                <g key={text.id} transform={isMoving && selectionTransform ? selectionTransform : undefined}>
+                <text x={text.x} y={text.y + 16} fill={text.color} opacity={text.opacity} fontSize={16} fontFamily="inherit" transform={textTransform}>
                   {text.text.split("\n").map((line, index) => (
                     <tspan key={index} x={text.x} dy={index === 0 ? 0 : 20}>
                       {line || " "}
                     </tspan>
                   ))}
                 </text>
+                </g>
               )
             })}
           </g>

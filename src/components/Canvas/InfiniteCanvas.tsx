@@ -9,6 +9,7 @@ import { getStroke } from "perfect-freehand"
 import { getSvgPathFromStroke } from "../../utils/brushEngine"
 import { DEFAULT_BRUSH } from "../../utils/brushConfig"
 import { boundsIntersect } from "../../utils/bounds"
+import { transformSelectionPoint } from "../../utils/selectionTransform"
 import type { Bounds, Point, Stroke } from "../../types"
 import { hasToolFunction } from "../../utils/toolsData"
 
@@ -20,9 +21,12 @@ const SELECTION_DRAG_THRESHOLD_PX = 3
 type SelectionInteraction = {
   origin: CanvasPoint
   initialSelectedIds: string[]
-  mode: "pending" | "brushing" | "marquee" | "translating"
+  mode: "pending" | "brushing" | "marquee" | "translating" | "scaling" | "rotating"
   hasHitStroke: boolean
   lassoPoints: CanvasPoint[]
+  bounds?: Bounds
+  transformOrigin?: CanvasPoint
+  startAngle?: number
 }
 
 type CanvasPoint = Pick<Point, "x" | "y">
@@ -57,10 +61,31 @@ type NudgeInteraction = {
 const TEXT_MIN_WIDTH_PX = 160
 const TEXT_MIN_HEIGHT_PX = 32
 const NUDGE_RADIUS_PX = 72
+const TRANSFORM_HANDLE_RADIUS_PX = 12
+const MIN_SELECTION_SCALE = 0.05
 const showSpatialIndexStats = import.meta.env.DEV
 
 const selectionEquals = (a: string[], b: string[]) =>
   a.length === b.length && a.every((id, index) => id === b[index])
+
+const mergeSelectionBounds = (state: ReturnType<typeof useCanvasStore.getState>, ids: string[]) => {
+  let bounds: Bounds | undefined
+  for (const id of ids) {
+    const next = state.doc.strokes[id]?.bounds ?? state.doc.texts[id]?.bounds
+    if (!next) continue
+    if (!bounds) {
+      bounds = { ...next }
+      continue
+    }
+    const right = Math.max(bounds.x + bounds.width, next.x + next.width)
+    const bottom = Math.max(bounds.y + bounds.height, next.y + next.height)
+    bounds.x = Math.min(bounds.x, next.x)
+    bounds.y = Math.min(bounds.y, next.y)
+    bounds.width = right - bounds.x
+    bounds.height = bottom - bounds.y
+  }
+  return bounds
+}
 
 const getLassoBounds = (points: CanvasPoint[]): Bounds => {
   let minX = Infinity
@@ -230,6 +255,7 @@ export const InfiniteCanvas: React.FC = () => {
   const addText = useCanvasStore((s) => s.addText)
   const updateText = useCanvasStore((s) => s.updateText)
   const updateStrokeGeometry = useCanvasStore((s) => s.updateStrokeGeometry)
+  const commitShapeTransform = useCanvasStore((s) => s.commitShapeTransform)
   const setCamera = useCanvasStore((s) => s.setCamera)
   const currentInputTypeRef = useRef<string>("mouse")
 
@@ -443,6 +469,72 @@ export const InfiniteCanvas: React.FC = () => {
       const state = useCanvasStore.getState()
       if (hasToolFunction(state.ui.activeTool, "marquee")) {
         const initialSelectedIds = state.ui.selectedStrokeIds
+        const selectedBounds = mergeSelectionBounds(state, initialSelectedIds)
+        const handleRadius = TRANSFORM_HANDLE_RADIUS_PX / cameraRef.current.zoom
+        const resetTransform = () => {
+          state.setSelectionTranslation({ x: 0, y: 0 })
+          state.setSelectionScale({ x: 1, y: 1 })
+          state.setSelectionRotation(0)
+          state.setSelectionTransformOrigin(null)
+        }
+        if (selectedBounds) {
+          const center = {
+            x: selectedBounds.x + selectedBounds.width / 2,
+            y: selectedBounds.y + selectedBounds.height / 2,
+          }
+          const rotateHandle = { x: center.x, y: selectedBounds.y - 28 / cameraRef.current.zoom }
+          if (Math.hypot(point.x - rotateHandle.x, point.y - rotateHandle.y) <= handleRadius) {
+            resetTransform()
+            state.setSelectionTransformOrigin(center)
+            selectionRef.current = {
+              origin: point,
+              initialSelectedIds,
+              mode: "rotating",
+              hasHitStroke: true,
+              lassoPoints: [point],
+              bounds: selectedBounds,
+              transformOrigin: center,
+              startAngle: Math.atan2(point.y - center.y, point.x - center.x),
+            }
+            return
+          }
+
+          const corners = [
+            { x: selectedBounds.x, y: selectedBounds.y, opposite: { x: selectedBounds.x + selectedBounds.width, y: selectedBounds.y + selectedBounds.height } },
+            { x: selectedBounds.x + selectedBounds.width, y: selectedBounds.y, opposite: { x: selectedBounds.x, y: selectedBounds.y + selectedBounds.height } },
+            { x: selectedBounds.x + selectedBounds.width, y: selectedBounds.y + selectedBounds.height, opposite: { x: selectedBounds.x, y: selectedBounds.y } },
+            { x: selectedBounds.x, y: selectedBounds.y + selectedBounds.height, opposite: { x: selectedBounds.x + selectedBounds.width, y: selectedBounds.y } },
+          ]
+          const corner = corners.find((candidate) => Math.hypot(point.x - candidate.x, point.y - candidate.y) <= handleRadius)
+          if (corner) {
+            resetTransform()
+            state.setSelectionTransformOrigin(corner.opposite)
+            selectionRef.current = {
+              origin: point,
+              initialSelectedIds,
+              mode: "scaling",
+              hasHitStroke: true,
+              lassoPoints: [point],
+              bounds: selectedBounds,
+              transformOrigin: corner.opposite,
+            }
+            return
+          }
+          if (isPointInBounds(point, selectedBounds)) {
+            resetTransform()
+            state.setSelectionTransformOrigin(center)
+            selectionRef.current = {
+              origin: point,
+              initialSelectedIds,
+              mode: "translating",
+              hasHitStroke: true,
+              lassoPoints: [point],
+              bounds: selectedBounds,
+              transformOrigin: center,
+            }
+            return
+          }
+        }
         if (!modifiers.shiftKey && initialSelectedIds.length) state.setSelectedStrokes([])
         selectionRef.current = {
           origin: point,
@@ -501,6 +593,28 @@ export const InfiniteCanvas: React.FC = () => {
       }
 
       const state = useCanvasStore.getState()
+      if (interaction.mode === "translating") {
+        state.setSelectionTranslation({ x: dx, y: dy })
+        return
+      }
+      if (interaction.mode === "scaling") {
+        const origin = interaction.transformOrigin!
+        const startX = interaction.origin.x - origin.x
+        const startY = interaction.origin.y - origin.y
+        const nextX = point.x - origin.x
+        const nextY = point.y - origin.y
+        state.setSelectionScale({
+          x: Math.max(MIN_SELECTION_SCALE, Math.abs(startX) < 0.001 ? 1 : nextX / startX),
+          y: Math.max(MIN_SELECTION_SCALE, Math.abs(startY) < 0.001 ? 1 : nextY / startY),
+        })
+        return
+      }
+      if (interaction.mode === "rotating") {
+        const origin = interaction.transformOrigin!
+        const angle = Math.atan2(point.y - origin.y, point.x - origin.x)
+        state.setSelectionRotation(((angle - interaction.startAngle!) * 180) / Math.PI)
+        return
+      }
       if (interaction.mode === "pending") {
         if (hasToolFunction(state.ui.activeTool, "marquee")) {
           interaction.mode = "marquee"
@@ -553,9 +667,64 @@ export const InfiniteCanvas: React.FC = () => {
       const state = useCanvasStore.getState()
       const dx = point.x - interaction.origin.x
       const dy = point.y - interaction.origin.y
-      if (interaction.mode === "translating") {
-        state.translateStrokes(state.ui.selectedStrokeIds, dx, dy)
+      if (interaction.mode === "translating" || interaction.mode === "scaling" || interaction.mode === "rotating") {
+        const origin = interaction.transformOrigin
+        if (origin) {
+          const { selectionTranslation, selectionScale, selectionRotation } = state.ui
+          const selectedIds = state.ui.selectedStrokeIds
+          const strokeUpdates = selectedIds.flatMap((id) => {
+            const stroke = state.doc.strokes[id]
+            if (!stroke) return []
+            const offsetX = stroke.offset?.x ?? 0
+            const offsetY = stroke.offset?.y ?? 0
+            const points = stroke.points.map((strokePoint) => {
+              const world = transformSelectionPoint(
+                { x: strokePoint.x + offsetX, y: strokePoint.y + offsetY },
+                {
+                  origin,
+                  scale: selectionScale,
+                  rotation: selectionRotation,
+                  translation: selectionTranslation,
+                },
+              )
+              return { ...strokePoint, x: world.x - offsetX, y: world.y - offsetY }
+            })
+            const pathData = stroke.tool === "fill"
+              ? getClosedPathData(points)
+              : getSvgPathFromStroke(getStroke(points, { ...DEFAULT_BRUSH, size: stroke.width }))
+            return [{ id, points, pathData }]
+          })
+          const textUpdates = selectedIds.flatMap((id) => {
+            const text = state.doc.texts[id]
+            if (!text) return []
+            const offsetX = text.offset?.x ?? 0
+            const offsetY = text.offset?.y ?? 0
+            const position = transformSelectionPoint(
+              { x: text.x + offsetX, y: text.y + offsetY },
+              {
+                origin,
+                scale: selectionScale,
+                rotation: selectionRotation,
+                translation: selectionTranslation,
+              },
+            )
+            return [{
+              id,
+              x: position.x,
+              y: position.y,
+              width: Math.max(1, text.width * selectionScale.x),
+              height: Math.max(1, text.height * selectionScale.y),
+              rotation: (text.rotation ?? 0) + selectionRotation,
+            }]
+          })
+          commitShapeTransform(strokeUpdates, textUpdates)
+        } else if (interaction.mode === "translating") {
+          state.translateStrokes(state.ui.selectedStrokeIds, dx, dy)
+        }
         state.setSelectionTranslation({ x: 0, y: 0 })
+        state.setSelectionScale({ x: 1, y: 1 })
+        state.setSelectionRotation(0)
+        state.setSelectionTransformOrigin(null)
       } else if (interaction.mode === "marquee") {
         const marquee = {
           x: Math.min(interaction.origin.x, point.x),
@@ -576,7 +745,7 @@ export const InfiniteCanvas: React.FC = () => {
         state.setSelectionLasso(null)
       }
     },
-    [updateLassoSelection, updateMarqueeSelection],
+    [commitShapeTransform, updateLassoSelection, updateMarqueeSelection],
   )
 
   const handleNudgeStart = useCallback((point: CanvasPoint) => {

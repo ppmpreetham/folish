@@ -846,7 +846,9 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
                       : TOOLS.find((t) => t.id === assignment.id);
                   if (item && item.logo) {
                     const Logo = item.logo;
-                    content = <Logo size={24} weight="fill" />;
+                    content = assignment.type === "brush" ? (
+                      <span style={{ color: activeColor }}><Logo size={24} weight="fill" /></span>
+                    ) : <Logo size={24} weight="fill" />;
                   } else {
                     content = <span>{label.id + 1}</span>;
                   }

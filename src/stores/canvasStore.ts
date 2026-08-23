@@ -48,6 +48,9 @@ interface CanvasStore {
   setSelectionLasso: (lasso: SelectionLasso | null) => void
   setSelectionMarquee: (marquee: Bounds | null) => void
   setSelectionTranslation: (translation: { x: number; y: number }) => void
+  setSelectionScale: (scale: { x: number; y: number }) => void
+  setSelectionRotation: (rotation: number) => void
+  setSelectionTransformOrigin: (origin: { x: number; y: number } | null) => void
   setNudgePreview: (preview: { strokeId: string; pathData: string } | null) => void
 
   execute: (recipe: (draft: CanvasState) => void) => void
@@ -57,6 +60,10 @@ interface CanvasStore {
   setShapeColor: (ids: string[], color: string) => void
   updateStrokePoints: (id: string, points: Point[]) => void
   updateStrokeGeometry: (id: string, points: Point[], pathData: string) => void
+  commitShapeTransform: (
+    strokes: Array<{ id: string; points: Point[]; pathData: string }>,
+    texts: Array<{ id: string; x: number; y: number; width: number; height: number; rotation: number }>,
+  ) => void
   translateStrokes: (ids: string[], dx: number, dy: number) => void
   deleteStrokes: (ids: string[]) => void
 
@@ -133,6 +140,9 @@ const initialUI: UIState = {
   selectionLasso: null,
   selectionMarquee: null,
   selectionTranslation: { x: 0, y: 0 },
+  selectionScale: { x: 1, y: 1 },
+  selectionRotation: 0,
+  selectionTransformOrigin: null,
   nudgePreview: null,
 }
 
@@ -225,6 +235,20 @@ export const useCanvasStore = create<CanvasStore>()(
           if (current.x === translation.x && current.y === translation.y) return
           set((state) => ({ ui: { ...state.ui, selectionTranslation: translation } }))
         },
+        setSelectionScale: (scale) => {
+          const current = get().ui.selectionScale
+          if (current.x === scale.x && current.y === scale.y) return
+          set((state) => ({ ui: { ...state.ui, selectionScale: scale } }))
+        },
+        setSelectionRotation: (rotation) => {
+          if (get().ui.selectionRotation === rotation) return
+          set((state) => ({ ui: { ...state.ui, selectionRotation: rotation } }))
+        },
+        setSelectionTransformOrigin: (origin) => {
+          const current = get().ui.selectionTransformOrigin
+          if (current?.x === origin?.x && current?.y === origin?.y) return
+          set((state) => ({ ui: { ...state.ui, selectionTransformOrigin: origin } }))
+        },
         setNudgePreview: (preview) => {
           const current = get().ui.nudgePreview
           if (current?.strokeId === preview?.strokeId && current?.pathData === preview?.pathData) return
@@ -315,6 +339,66 @@ export const useCanvasStore = create<CanvasStore>()(
           })
           get().spatialIndex.remove(id)
           get().spatialIndex.insert(id, stroke.layerId, nextBounds)
+        },
+
+        commitShapeTransform: (strokeUpdates, textUpdates) => {
+          if (strokeUpdates.length === 0 && textUpdates.length === 0) return
+          const state = get()
+          const affectedLayerIds = new Set<string>()
+          const nextStrokeBounds = new Map<string, Bounds>()
+          const nextTextBounds = new Map<string, Bounds>()
+          for (const update of strokeUpdates) {
+            const stroke = state.doc.strokes[update.id]
+            if (!stroke) continue
+            const localBounds = expandBounds(calculateStrokeBounds(update.points), stroke.width * 2)
+            nextStrokeBounds.set(update.id, {
+              ...localBounds,
+              x: localBounds.x + (stroke.offset?.x ?? 0),
+              y: localBounds.y + (stroke.offset?.y ?? 0),
+            })
+            affectedLayerIds.add(stroke.layerId)
+          }
+          for (const update of textUpdates) {
+            const text = state.doc.texts[update.id]
+            if (!text) continue
+            nextTextBounds.set(update.id, { x: update.x, y: update.y, width: update.width, height: update.height })
+            affectedLayerIds.add(text.layerId)
+          }
+          state.execute((draft) => {
+            for (const update of strokeUpdates) {
+              const stroke = draft.strokes[update.id]
+              const bounds = nextStrokeBounds.get(update.id)
+              if (!stroke || !bounds) continue
+              stroke.points = [...update.points]
+              stroke.pointsCompressed = encodePoints(update.points)
+              stroke.pathData = update.pathData
+              stroke.bounds = bounds
+            }
+            for (const update of textUpdates) {
+              const text = draft.texts[update.id]
+              const bounds = nextTextBounds.get(update.id)
+              if (!text || !bounds) continue
+              text.x = update.x - (text.offset?.x ?? 0)
+              text.y = update.y - (text.offset?.y ?? 0)
+              text.width = update.width
+              text.height = update.height
+              text.rotation = update.rotation
+              text.bounds = bounds
+            }
+            affectedLayerIds.forEach((layerId) => recalculateLayerBounds(draft, layerId))
+          })
+          for (const [id, bounds] of nextStrokeBounds) {
+            const stroke = state.doc.strokes[id]
+            if (!stroke) continue
+            state.spatialIndex.remove(id)
+            state.spatialIndex.insert(id, stroke.layerId, bounds)
+          }
+          for (const [id, bounds] of nextTextBounds) {
+            const text = state.doc.texts[id]
+            if (!text) continue
+            state.spatialIndex.remove(id)
+            state.spatialIndex.insert(id, text.layerId, bounds)
+          }
         },
 
         addText: (text) => {

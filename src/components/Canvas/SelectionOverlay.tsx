@@ -1,12 +1,16 @@
 import { memo, useMemo } from "react"
 import { useCanvasStore } from "../../stores/canvasStore"
 import { mergeBounds } from "../../utils/bounds"
+import { getSvgSelectionTransform } from "../../utils/selectionTransform"
 
 export const SelectionOverlay = memo(() => {
   const selectedStrokeIds = useCanvasStore((state) => state.ui.selectedStrokeIds)
   const selectionLasso = useCanvasStore((state) => state.ui.selectionLasso)
   const selectionMarquee = useCanvasStore((state) => state.ui.selectionMarquee)
   const selectionTranslation = useCanvasStore((state) => state.ui.selectionTranslation)
+  const selectionScale = useCanvasStore((state) => state.ui.selectionScale)
+  const selectionRotation = useCanvasStore((state) => state.ui.selectionRotation)
+  const selectionTransformOrigin = useCanvasStore((state) => state.ui.selectionTransformOrigin)
   const strokes = useCanvasStore((state) => state.doc.strokes)
   const texts = useCanvasStore((state) => state.doc.texts)
   const camera = useCanvasStore((state) => state.ui.camera)
@@ -24,6 +28,15 @@ export const SelectionOverlay = memo(() => {
   const strokeWidth = 1.5 / camera.zoom
   const guideWidth = 0.5 / camera.zoom
   const handleSize = 7 / camera.zoom
+  const rotationHandleOffset = 28 / camera.zoom
+  const selectionTransform = selectionTransformOrigin
+    ? getSvgSelectionTransform({
+        origin: selectionTransformOrigin,
+        translation: selectionTranslation,
+        scale: selectionScale,
+        rotation: selectionRotation,
+      })
+    : `translate(${selectionTranslation.x} ${selectionTranslation.y})`
   const viewport = {
     x: -camera.x / camera.zoom,
     y: -camera.y / camera.zoom,
@@ -64,7 +77,7 @@ export const SelectionOverlay = memo(() => {
             <line x1={viewport.x} y1={selectedBounds.y + selectionTranslation.y} x2={viewport.x + viewport.width} y2={selectedBounds.y + selectionTranslation.y} />
             <line x1={viewport.x} y1={selectedBounds.y + selectedBounds.height + selectionTranslation.y} x2={viewport.x + viewport.width} y2={selectedBounds.y + selectedBounds.height + selectionTranslation.y} />
           </g>
-          <g transform={`translate(${selectionTranslation.x} ${selectionTranslation.y})`}>
+          <g transform={selectionTransform}>
           <rect
             x={selectedBounds.x}
             y={selectedBounds.y}
@@ -90,6 +103,22 @@ export const SelectionOverlay = memo(() => {
               strokeWidth={strokeWidth}
             />
           ))}
+          <line
+            x1={selectedBounds.x + selectedBounds.width / 2}
+            y1={selectedBounds.y}
+            x2={selectedBounds.x + selectedBounds.width / 2}
+            y2={selectedBounds.y - rotationHandleOffset}
+            stroke="#6b7280"
+            strokeWidth={strokeWidth}
+          />
+          <circle
+            cx={selectedBounds.x + selectedBounds.width / 2}
+            cy={selectedBounds.y - rotationHandleOffset}
+            r={handleSize / 2}
+            fill="white"
+            stroke="#6b7280"
+            strokeWidth={strokeWidth}
+          />
           </g>
         </>
       )}
