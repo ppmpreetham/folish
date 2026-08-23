@@ -28,10 +28,12 @@ export const Renderer = memo(() => {
 
         const layerVisibleIds = visibleStrokesMap[layer.id] || []
         if (layerVisibleIds.length === 0) return null
+        
+        const visibleSet = new Set(layerVisibleIds)
 
         return (
           <g key={layer.id} style={{ opacity: layer.opacity }}>
-            {layerVisibleIds.map((strokeId) => {
+            {layer.strokeIds.filter((id) => visibleSet.has(id)).map((strokeId) => {
               const stroke = strokes[strokeId]
               if (!stroke) return null
 

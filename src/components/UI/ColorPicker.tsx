@@ -12,6 +12,7 @@ import {
 } from "phosphor-react";
 import { BRUSHES, TOOLS } from "../../utils/toolsData";
 import SideBar from "./Sidebar";
+import { getContrastColor } from "../../utils/rgb";
 
 const BORDER_COLOR = "#ffffff";
 const MIDDLE_BG_COLOR = "#374151";
@@ -245,13 +246,13 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
         domEl.style.opacity = `${seg.element.alpha}`;
 
         if (isActive) {
-          domEl.style.color = "#ffffff";
-          domEl.style.textShadow = "0px 1px 3px rgba(0,0,0,0.6)";
+          domEl.style.color = getContrastColor(currentActiveColor || "#ff69b4");
         } else {
           const colorValue = Math.round(156 + seg.element.hoverAlpha * (255 - 156));
           domEl.style.color = `rgb(${colorValue}, ${colorValue}, ${colorValue})`;
-          domEl.style.textShadow = "none";
         }
+
+        domEl.style.textShadow = "none";
       }
     });
 
@@ -261,15 +262,12 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     ctx.stroke(centerCorePathRef.current);
 
     const fallbackColor = "#FF69B4";
-    ctx.fillStyle = "white";
+    const centerTextColor = getContrastColor(currentActiveColor || fallbackColor);
+
+    ctx.fillStyle = centerTextColor;
     ctx.font = "bold 11px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.shadowColor = "rgba(0,0,0,0.8)";
-    ctx.shadowBlur = 4;
-    ctx.strokeStyle = "rgba(0,0,0,0.4)";
-    ctx.lineWidth = 2;
-    ctx.strokeText(currentActiveColor || fallbackColor, SIZE / 2, SIZE / 2);
     ctx.fillText(currentActiveColor || fallbackColor, SIZE / 2, SIZE / 2);
 
     ctx.restore();
@@ -299,7 +297,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     ctx.fill(swatch.path);
 
     if (isSelected) {
-      ctx.strokeStyle = "white";
+      ctx.strokeStyle = getContrastColor(swatch.color);
       ctx.lineWidth = 2;
       ctx.stroke(swatch.path);
     } else {
@@ -712,7 +710,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
           <div
             id="popout-slider"
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute top-1/2 left-1/2 -translate-y-1/2 rounded-r-xl shadow-lg pointer-events-auto border-y border-r border-gray-600 flex flex-col justify-center animate-in fade-in slide-in-from-left-8 duration-200 z-0"
+            className="absolute top-1/2 left-1/2 -translate-y-1/2 rounded-r-xl pointer-events-auto border-y border-r border-gray-600 flex flex-col justify-center animate-in fade-in slide-in-from-left-8 duration-200 z-0"
             style={{
               backgroundColor: MIDDLE_BG_COLOR,
               width: "320px",
@@ -726,7 +724,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
               <span>0%</span>
               <span>50%</span>
               <span>70%</span>
-              <div className="bg-white text-black px-2 py-1 rounded shadow text-center min-w-10">
+              <div className="bg-white text-black px-2 py-1 rounded text-center min-w-10">
                 {activeMiddle === 0
                   ? Math.round((activeWidth / 100) * 100)
                   : activeMiddle === 1
@@ -761,7 +759,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
                 }}
               />
               <div
-                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-md pointer-events-none"
+                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full pointer-events-none"
                 style={{
                   left: `calc(${
                     activeMiddle === 0

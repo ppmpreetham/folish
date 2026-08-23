@@ -15,13 +15,23 @@ function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "z") {
-        e.preventDefault()
-        undo()
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return // Let the browser handle undo/redo in text inputs
       }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "z") {
-        e.preventDefault()
-        redo()
+
+      const isZ = e.code === "KeyZ" || e.key.toLowerCase() === "z"
+      const isY = e.code === "KeyY" || e.key.toLowerCase() === "y"
+
+      if (e.ctrlKey || e.metaKey) {
+        if (isZ && !e.shiftKey) {
+          console.log("⌨️ Ctrl+Z detected -> Undo")
+          e.preventDefault()
+          undo()
+        } else if ((isZ && e.shiftKey) || (isY && !e.shiftKey)) {
+          console.log("⌨️ Ctrl+Shift+Z or Ctrl+Y detected -> Redo")
+          e.preventDefault()
+          redo()
+        }
       }
     }
 
