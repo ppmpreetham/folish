@@ -29,6 +29,7 @@ interface CanvasStore {
   setCamera: (camera: Camera) => void
   setActiveTool: (tool: Tool) => void
   setActiveColor: (color: string) => void
+  setActiveOpacity: (opacity: number) => void
   setActiveWidth: (width: number) => void
   setActiveLayer: (id: string) => void
   setLayerOpacityTransient: (id: string, opacity: number) => void
@@ -45,6 +46,10 @@ interface CanvasStore {
   renameLayer: (id: string, name: string) => void
   toggleLayerLock: (id: string) => void
   duplicateLayer: (id: string) => void
+  moveLayerUp: (id: string) => void
+  moveLayerDown: (id: string) => void
+  moveLayerTo: (fromIndex: number, toIndex: number) => void
+  reorderLayers: (newLayers: Layer[]) => void
 
   toggleLayersPanel: (visible: boolean) => void
   togglePrecisionPanel: (visible: boolean) => void
@@ -58,6 +63,9 @@ interface CanvasStore {
 
   setSidebarOpen: (open: boolean) => void
   setEditingOption: (option: number | null) => void
+  setActiveSmooth: (smooth: number) => void
+  setActiveBrush: (brushId: string) => void
+  setSlotAssignment: (slotIndex: number, assignment: import("../types").SlotAssignment) => void
 }
 
 const initialDoc: CanvasState = {
@@ -86,6 +94,13 @@ const initialUI: UIState = {
   showPrecisionPanel: true,
   sidebarOpen: false,
   editingOption: null,
+  activeSmooth: 0.5,
+  activeBrush: "pen",
+  toolSlots: {
+    0: { type: "brush", id: "pen" },
+    1: { type: "brush", id: "marker" },
+    2: { type: "tool", id: "selection" },
+  },
 }
 
 const MAX_HISTORY = 50
@@ -291,6 +306,48 @@ export const useCanvasStore = create<CanvasStore>()(
             if (layer) layer.name = name.trim() || "Layer"
           }),
 
+        moveLayerUp: (id: string) => {
+          get().execute((draft) => {
+            const index = draft.layers.findIndex((l) => l.id === id)
+            if (index < draft.layers.length - 1 && index !== -1) {
+              const temp = draft.layers[index]
+              draft.layers[index] = draft.layers[index + 1]
+              draft.layers[index + 1] = temp
+            }
+          })
+        },
+
+        moveLayerDown: (id: string) => {
+          get().execute((draft) => {
+            const index = draft.layers.findIndex((l) => l.id === id)
+            if (index > 0) {
+              const temp = draft.layers[index]
+              draft.layers[index] = draft.layers[index - 1]
+              draft.layers[index - 1] = temp
+            }
+          })
+        },
+
+        moveLayerTo: (fromIndex: number, toIndex: number) => {
+          get().execute((draft) => {
+            if (
+              fromIndex >= 0 &&
+              fromIndex < draft.layers.length &&
+              toIndex >= 0 &&
+              toIndex < draft.layers.length
+            ) {
+              const layer = draft.layers.splice(fromIndex, 1)[0]
+              draft.layers.splice(toIndex, 0, layer)
+            }
+          })
+        },
+
+        reorderLayers: (newLayers: Layer[]) => {
+          get().execute((draft) => {
+            draft.layers = newLayers
+          })
+        },
+
         toggleLayerLock: (id) =>
           get().execute((draft) => {
             const layer = draft.layers.find((l) => l.id === id)
@@ -360,6 +417,26 @@ export const useCanvasStore = create<CanvasStore>()(
           set((state) => ({ ui: { ...state.ui, editingOption: option } }))
         },
 
+        setActiveSmooth: (smooth: number) => {
+          set((state) => ({ ui: { ...state.ui, activeSmooth: Math.max(0, Math.min(1, smooth)) } }))
+        },
+
+        setActiveBrush: (brushId: string) => {
+          set((state) => ({ ui: { ...state.ui, activeBrush: brushId } }))
+        },
+
+        setSlotAssignment: (slotIndex: number, assignment: import("../types").SlotAssignment) => {
+          set((state) => ({
+            ui: {
+              ...state.ui,
+              toolSlots: {
+                ...state.ui.toolSlots,
+                [slotIndex]: assignment,
+              },
+            },
+          }))
+        },
+
         undo: () => {
           const { past, doc } = get()
           if (past.length === 0) return
@@ -422,6 +499,10 @@ export const useCanvasStore = create<CanvasStore>()(
                 stroke.points = decodePoints(stroke.pointsCompressed)
               }
             })
+            const activeExists = state.doc.layers.some((l) => l.id === state.ui.activeLayerId)
+            if (!activeExists && state.doc.layers.length > 0) {
+              state.ui.activeLayerId = state.doc.layers[0].id
+            }
 
             state.spatialIndex = new SpatialIndex()
             state.rebuildSpatialIndex()

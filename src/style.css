@@ -13,3 +13,12 @@ polyline[pressure-aware] {
   --color-settings-hover: #1a1a1a;
   --color-settings-back: #0a0a0a;
 }
+
+.multi-selected .layer-row {
+  background-color: rgba(239, 246, 255, 0.5) !important;
+  border-color: rgb(191, 219, 254) !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+.multi-selected .layer-row input {
+  color: rgb(17, 24, 39) !important;
+}

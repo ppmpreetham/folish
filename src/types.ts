@@ -47,13 +47,18 @@ export interface CanvasState {
   strokes: Record<string, Stroke>
 }
 
-export type Tool = "pen" | "eraser" | "pan" | "select"
+export type Tool = string;
 
 export interface SelectionBox {
   x: number
   y: number
   width: number
   height: number
+}
+
+export interface SlotAssignment {
+  type: "brush" | "tool"
+  id: string
 }
 
 export interface UIState {
@@ -63,10 +68,13 @@ export interface UIState {
   activeOpacity: number
   activeWidth: number
   activeLayerId: string
-  showLayersPanel?: boolean
-  showPrecisionPanel?: boolean
-  sidebarOpen?: boolean
-  editingOption?: number | null
+  showLayersPanel: boolean
+  showPrecisionPanel: boolean
+  sidebarOpen: boolean
+  editingOption: number | null
+  activeBrush: string
+  activeSmooth: number
+  toolSlots: Record<number, SlotAssignment>
 }
 
 export interface SimpleUIState {
