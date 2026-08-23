@@ -62,13 +62,29 @@ export function getViewportBounds(
     x: number
     y: number
     zoom: number
+    rotation?: number
   },
   viewport: { width: number; height: number }
 ): Bounds {
-  return {
-    x: -camera.x / camera.zoom,
-    y: -camera.y / camera.zoom,
-    width: viewport.width / camera.zoom,
-    height: viewport.height / camera.zoom,
-  }
+  const radians = (-((camera.rotation ?? 0) * Math.PI)) / 180
+  const cosine = Math.cos(radians)
+  const sine = Math.sin(radians)
+  const centerX = viewport.width / 2
+  const centerY = viewport.height / 2
+  const corners = [
+    { x: 0, y: 0 },
+    { x: viewport.width, y: 0 },
+    { x: viewport.width, y: viewport.height },
+    { x: 0, y: viewport.height },
+  ].map((corner) => {
+    const x = corner.x - centerX
+    const y = corner.y - centerY
+    return {
+      x: (x * cosine - y * sine + centerX - camera.x) / camera.zoom,
+      y: (x * sine + y * cosine + centerY - camera.y) / camera.zoom,
+    }
+  })
+  const xs = corners.map((corner) => corner.x)
+  const ys = corners.map((corner) => corner.y)
+  return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) }
 }

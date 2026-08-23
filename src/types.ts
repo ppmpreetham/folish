@@ -92,7 +92,9 @@ export interface UIState {
   toolSlots: Record<number, SlotAssignment>
   selectedStrokeIds: string[]
   selectionLasso: SelectionLasso | null
+  selectionMarquee: Bounds | null
   selectionTranslation: { x: number; y: number }
+  nudgePreview: { strokeId: string; pathData: string } | null
 }
 
 export interface SimpleUIState {

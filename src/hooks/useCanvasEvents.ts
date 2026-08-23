@@ -27,6 +27,13 @@ interface UseCanvasEventsProps {
     modifiers: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean },
   ) => void
   onTextStart?: (point: CanvasPoint) => void
+  onNudgeStart?: (point: CanvasPoint) => void
+  onNudgeMove?: (point: CanvasPoint) => void
+  onNudgeEnd?: (point: CanvasPoint) => void
+  onRotateMove?: (dx: number, dy: number) => void
+  onFillStart?: (point: CanvasPoint) => void
+  onFillMove?: (point: CanvasPoint) => void
+  onFillEnd?: (point: CanvasPoint) => void
 }
 
 export const useCanvasEvents = (props: UseCanvasEventsProps) => {
@@ -36,6 +43,9 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
   const isDrawingRef = useRef(false)
   const isPanningRef = useRef(false)
   const isSelectingRef = useRef(false)
+  const isFillingRef = useRef(false)
+  const isNudgingRef = useRef(false)
+  const isRotatingRef = useRef(false)
   const lastPosRef = useRef({ x: 0, y: 0 })
   const rafRef = useRef<number | undefined>(undefined)
 
@@ -56,12 +66,20 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
 
       if (isPan) {
         isPanningRef.current = true
+      } else if (hasToolFunction(current.activeTool, "rotate")) {
+        isRotatingRef.current = true
+      } else if (current.activeTool === "fill") {
+        isFillingRef.current = true
+        current.onFillStart?.(toWorld(e.clientX, e.clientY))
       } else if (hasToolFunction(current.activeTool, "text")) {
         current.onTextStart?.(toWorld(e.clientX, e.clientY))
+      } else if (hasToolFunction(current.activeTool, "nudge")) {
+        isNudgingRef.current = true
+        current.onNudgeStart?.(toWorld(e.clientX, e.clientY))
       } else if (
         current.activeTool === "select" ||
         hasToolFunction(current.activeTool, "select") ||
-        hasToolFunction(current.activeTool, "nudge")
+        hasToolFunction(current.activeTool, "marquee")
       ) {
         isSelectingRef.current = true
         current.onSelectionStart?.(toWorld(e.clientX, e.clientY), {
@@ -117,6 +135,15 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
           const dy = y - lastPosRef.current.y
           lastPosRef.current = { x, y }
           current.onPanMove(dx, dy)
+        } else if (isRotatingRef.current) {
+          const dx = x - lastPosRef.current.x
+          const dy = y - lastPosRef.current.y
+          lastPosRef.current = { x, y }
+          current.onRotateMove?.(dx, dy)
+        } else if (isFillingRef.current) {
+          current.onFillMove?.(toWorld(x, y))
+        } else if (isNudgingRef.current) {
+          current.onNudgeMove?.(toWorld(x, y))
         } else if (isSelectingRef.current) {
           current.onSelectionMove?.(toWorld(x, y), {
             shiftKey: e.shiftKey,
@@ -142,6 +169,15 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
         e.currentTarget.releasePointerCapture(e.pointerId)
       }
       if (isPanningRef.current) isPanningRef.current = false
+      if (isRotatingRef.current) isRotatingRef.current = false
+      if (isFillingRef.current) {
+        isFillingRef.current = false
+        current.onFillEnd?.(toWorld(e.clientX, e.clientY))
+      }
+      if (isNudgingRef.current) {
+        isNudgingRef.current = false
+        current.onNudgeEnd?.(toWorld(e.clientX, e.clientY))
+      }
       if (isSelectingRef.current) {
         isSelectingRef.current = false
         current.onSelectionEnd?.(toWorld(e.clientX, e.clientY), {

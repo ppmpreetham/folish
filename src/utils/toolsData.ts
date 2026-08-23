@@ -11,6 +11,7 @@ import {
   PaintBucket,
   DotsThree,
   Cursor,
+  Selection,
   ArrowsOut,
   Scissors,
   SquareHalf,
@@ -112,6 +113,7 @@ export const BRUSHES: BrushItem[] = [
 
 export const TOOLS: ToolItem[] = [
   { id: "selection", name: "Selection", toolFunction: "select", logo: Cursor },
+  { id: "marquee", name: "Marquee", toolFunction: "marquee", logo: Selection },
   { id: "nudge", name: "Nudge", toolFunction: "nudge", logo: ArrowsOut },
   { id: "slice", name: "Slice", toolFunction: "slice", logo: Scissors },
   { id: "hard-mask", name: "Hard Mask", toolFunction: "hard-mask", logo: SquareHalf },

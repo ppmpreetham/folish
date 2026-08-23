@@ -46,13 +46,17 @@ interface CanvasStore {
   setLayerOpacityTransient: (id: string, opacity: number) => void
   setSelectedStrokes: (ids: string[]) => void
   setSelectionLasso: (lasso: SelectionLasso | null) => void
+  setSelectionMarquee: (marquee: Bounds | null) => void
   setSelectionTranslation: (translation: { x: number; y: number }) => void
+  setNudgePreview: (preview: { strokeId: string; pathData: string } | null) => void
 
   execute: (recipe: (draft: CanvasState) => void) => void
   addStroke: (stroke: Stroke) => void
   addText: (text: Omit<TextShape, "id" | "bounds" | "timestamp">) => void
   updateText: (id: string, text: Pick<TextShape, "text" | "width" | "height">) => void
+  setShapeColor: (ids: string[], color: string) => void
   updateStrokePoints: (id: string, points: Point[]) => void
+  updateStrokeGeometry: (id: string, points: Point[], pathData: string) => void
   translateStrokes: (ids: string[], dx: number, dy: number) => void
   deleteStrokes: (ids: string[]) => void
 
@@ -117,17 +121,19 @@ const initialUI: UIState = {
   activeBrush: "pen",
   toolSlots: {
     0: { type: "brush", id: "pen" },
-    1: { type: "brush", id: "marker" },
+    1: { type: "brush", id: "fill" },
     2: { type: "tool", id: "selection" },
-    3: { type: "tool", id: "text" },
-    4: { type: "tool", id: "nudge" },
-    5: { type: "tool", id: "pan" },
-    6: { type: "brush", id: "fountain" },
-    9: { type: "brush", id: "dynamic-pen" },
+    3: { type: "tool", id: "marquee" },
+    4: { type: "tool", id: "text" },
+    5: { type: "tool", id: "nudge" },
+    6: { type: "tool", id: "pan" },
+    9: { type: "tool", id: "rotate" },
   },
   selectedStrokeIds: [],
   selectionLasso: null,
+  selectionMarquee: null,
   selectionTranslation: { x: 0, y: 0 },
+  nudgePreview: null,
 }
 
 const MAX_HISTORY = 50
@@ -187,11 +193,6 @@ export const useCanvasStore = create<CanvasStore>()(
 
         rebuildSpatialIndex: () => {
           const { doc, spatialIndex } = get()
-          console.log(
-            "🔄 Rebuilding spatial index with",
-            Object.keys(doc.strokes).length,
-            "strokes",
-          )
           spatialIndex.buildFromStrokes(doc.strokes, doc.texts)
         },
 
@@ -211,10 +212,23 @@ export const useCanvasStore = create<CanvasStore>()(
           if (selectionLassoEquals(get().ui.selectionLasso, lasso)) return
           set((state) => ({ ui: { ...state.ui, selectionLasso: lasso } }))
         },
+        setSelectionMarquee: (marquee) => {
+          const current = get().ui.selectionMarquee
+          if (
+            current === marquee ||
+            (!!current && !!marquee && current.x === marquee.x && current.y === marquee.y && current.width === marquee.width && current.height === marquee.height)
+          ) return
+          set((state) => ({ ui: { ...state.ui, selectionMarquee: marquee } }))
+        },
         setSelectionTranslation: (translation) => {
           const current = get().ui.selectionTranslation
           if (current.x === translation.x && current.y === translation.y) return
           set((state) => ({ ui: { ...state.ui, selectionTranslation: translation } }))
+        },
+        setNudgePreview: (preview) => {
+          const current = get().ui.nudgePreview
+          if (current?.strokeId === preview?.strokeId && current?.pathData === preview?.pathData) return
+          set((state) => ({ ui: { ...state.ui, nudgePreview: preview } }))
         },
 
         setLayerOpacityTransient: (id: string, opacity: number) =>
@@ -258,7 +272,6 @@ export const useCanvasStore = create<CanvasStore>()(
           })
 
           if (strokeWithBounds.bounds) {
-            console.log("✅ Adding stroke to spatial index:", stroke.id)
             get().spatialIndex.insert(stroke.id, stroke.layerId, strokeWithBounds.bounds)
           }
         },
@@ -280,6 +293,28 @@ export const useCanvasStore = create<CanvasStore>()(
 
           get().spatialIndex.remove(id)
           get().spatialIndex.insert(id, stroke.layerId, newBounds)
+        },
+
+        updateStrokeGeometry: (id, points, pathData) => {
+          const stroke = get().doc.strokes[id]
+          if (!stroke) return
+          const localBounds = expandBounds(calculateStrokeBounds(points), stroke.width * 2)
+          const nextBounds = {
+            ...localBounds,
+            x: localBounds.x + (stroke.offset?.x ?? 0),
+            y: localBounds.y + (stroke.offset?.y ?? 0),
+          }
+          get().execute((draft) => {
+            const draftStroke = draft.strokes[id]
+            if (!draftStroke) return
+            draftStroke.points = [...points]
+            draftStroke.pointsCompressed = encodePoints(points)
+            draftStroke.pathData = pathData
+            draftStroke.bounds = nextBounds
+            recalculateLayerBounds(draft, draftStroke.layerId)
+          })
+          get().spatialIndex.remove(id)
+          get().spatialIndex.insert(id, stroke.layerId, nextBounds)
         },
 
         addText: (text) => {
@@ -314,6 +349,21 @@ export const useCanvasStore = create<CanvasStore>()(
           })
           get().spatialIndex.remove(id)
           get().spatialIndex.insert(id, text.layerId, bounds)
+        },
+
+        setShapeColor: (ids, color) => {
+          const targetIds = ids.filter((id) => {
+            const stroke = get().doc.strokes[id]
+            const text = get().doc.texts[id]
+            return (stroke?.color ?? text?.color) !== color
+          })
+          if (targetIds.length === 0) return
+          get().execute((draft) => {
+            for (const id of targetIds) {
+              if (draft.strokes[id]) draft.strokes[id].color = color
+              if (draft.texts[id]) draft.texts[id].color = color
+            }
+          })
         },
 
         translateStrokes: (ids, dx, dy) => {
@@ -686,7 +736,6 @@ export const useCanvasStore = create<CanvasStore>()(
 
             state.spatialIndex = new SpatialIndex()
             state.rebuildSpatialIndex()
-            console.log("🔄 Spatial index rebuilt and points decompressed")
           }
         },
       },

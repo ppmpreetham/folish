@@ -17,9 +17,19 @@ export const useCanvasMath = ({ cameraRef, rectRef }: UseCanvasMathProps) => {
       const rect = rectRef.current
       if (!rect || !cam) return { x: 0, y: 0 }
 
+      const radians = (-cam.rotation * Math.PI) / 180
+      const cosine = Math.cos(radians)
+      const sine = Math.sin(radians)
+      const centerX = rect.width / 2
+      const centerY = rect.height / 2
+      const x = screenX - rect.left - centerX
+      const y = screenY - rect.top - centerY
+      const unrotatedX = x * cosine - y * sine + centerX
+      const unrotatedY = x * sine + y * cosine + centerY
+
       return {
-        x: (screenX - rect.left - cam.x) / cam.zoom,
-        y: (screenY - rect.top - cam.y) / cam.zoom,
+        x: (unrotatedX - cam.x) / cam.zoom,
+        y: (unrotatedY - cam.y) / cam.zoom,
       }
     },
     [cameraRef, rectRef]
@@ -31,9 +41,17 @@ export const useCanvasMath = ({ cameraRef, rectRef }: UseCanvasMathProps) => {
       const rect = rectRef.current
       if (!rect || !cam) return { x: 0, y: 0 }
 
+      const radians = (cam.rotation * Math.PI) / 180
+      const cosine = Math.cos(radians)
+      const sine = Math.sin(radians)
+      const centerX = rect.width / 2
+      const centerY = rect.height / 2
+      const x = cam.x + worldX * cam.zoom - centerX
+      const y = cam.y + worldY * cam.zoom - centerY
+
       return {
-        x: worldX * cam.zoom + cam.x + rect.left,
-        y: worldY * cam.zoom + cam.y + rect.top,
+        x: x * cosine - y * sine + centerX + rect.left,
+        y: x * sine + y * cosine + centerY + rect.top,
       }
     },
     [cameraRef, rectRef]
@@ -46,16 +64,25 @@ export const useCanvasMath = ({ cameraRef, rectRef }: UseCanvasMathProps) => {
 
       if (!rect || !cam) return { x: 0, y: 0, zoom: 1, rotation: 0 }
 
-      const worldX = (mouseX - rect.left - cam.x) / cam.zoom
-      const worldY = (mouseY - rect.top - cam.y) / cam.zoom
+      const radians = (-cam.rotation * Math.PI) / 180
+      const cosine = Math.cos(radians)
+      const sine = Math.sin(radians)
+      const centerX = rect.width / 2
+      const centerY = rect.height / 2
+      const pointerX = mouseX - rect.left - centerX
+      const pointerY = mouseY - rect.top - centerY
+      const unrotatedX = pointerX * cosine - pointerY * sine + centerX
+      const unrotatedY = pointerX * sine + pointerY * cosine + centerY
+      const worldX = (unrotatedX - cam.x) / cam.zoom
+      const worldY = (unrotatedY - cam.y) / cam.zoom
 
       const zoomDelta = -deltaY * ZOOM_SENSITIVITY
       const newZoom = Math.min(Math.max(cam.zoom * Math.exp(zoomDelta), MIN_ZOOM), MAX_ZOOM)
 
       return {
         zoom: newZoom,
-        x: mouseX - rect.left - worldX * newZoom,
-        y: mouseY - rect.top - worldY * newZoom,
+        x: unrotatedX - worldX * newZoom,
+        y: unrotatedY - worldY * newZoom,
         rotation: cam.rotation,
       }
     },
@@ -66,14 +93,20 @@ export const useCanvasMath = ({ cameraRef, rectRef }: UseCanvasMathProps) => {
     const rect = rectRef.current
     if (!rect) return { x: 0, y: 0, width: 0, height: 0 }
 
-    const topLeft = toWorld(rect.left, rect.top)
-    const bottomRight = toWorld(rect.right, rect.bottom)
+    const corners = [
+      toWorld(rect.left, rect.top),
+      toWorld(rect.right, rect.top),
+      toWorld(rect.right, rect.bottom),
+      toWorld(rect.left, rect.bottom),
+    ]
+    const xs = corners.map((corner) => corner.x)
+    const ys = corners.map((corner) => corner.y)
 
     return {
-      x: topLeft.x,
-      y: topLeft.y,
-      width: bottomRight.x - topLeft.x,
-      height: bottomRight.y - topLeft.y,
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
     }
   }, [toWorld, rectRef])
 

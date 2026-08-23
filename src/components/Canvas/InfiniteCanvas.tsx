@@ -8,6 +8,7 @@ import { SpatialIndexStats } from "../Debug/SpatialIndexStats"
 import { getStroke } from "perfect-freehand"
 import { getSvgPathFromStroke } from "../../utils/brushEngine"
 import { DEFAULT_BRUSH } from "../../utils/brushConfig"
+import { boundsIntersect } from "../../utils/bounds"
 import type { Bounds, Point, Stroke } from "../../types"
 import { hasToolFunction } from "../../utils/toolsData"
 
@@ -19,7 +20,7 @@ const SELECTION_DRAG_THRESHOLD_PX = 3
 type SelectionInteraction = {
   origin: CanvasPoint
   initialSelectedIds: string[]
-  mode: "pending" | "brushing" | "translating"
+  mode: "pending" | "brushing" | "marquee" | "translating"
   hasHitStroke: boolean
   lassoPoints: CanvasPoint[]
 }
@@ -39,8 +40,23 @@ type TextDraft = {
   opacity: number
 }
 
+type FillInteraction = {
+  points: CanvasPoint[]
+  layerId: string
+  color: string
+  opacity: number
+}
+
+type NudgeInteraction = {
+  strokeId: string
+  origin: CanvasPoint
+  originalPoints: Point[]
+  influences: number[]
+}
+
 const TEXT_MIN_WIDTH_PX = 160
 const TEXT_MIN_HEIGHT_PX = 32
+const NUDGE_RADIUS_PX = 72
 const showSpatialIndexStats = import.meta.env.DEV
 
 const selectionEquals = (a: string[], b: string[]) =>
@@ -124,27 +140,72 @@ const lassoContainsBounds = (lasso: CanvasPoint[], bounds: Bounds) =>
     { x: bounds.x, y: bounds.y + bounds.height },
   ].every((point) => isPointInPolygon(point, lasso))
 
-const pointHitsStroke = (stroke: Stroke, point: CanvasPoint, zoom: number) => {
+const getStrokeWorldPoints = (stroke: Stroke): CanvasPoint[] => {
   const offsetX = stroke.offset?.x ?? 0
   const offsetY = stroke.offset?.y ?? 0
-  const tolerance = Math.max(stroke.width * 1.5, 8 / zoom)
-  const toleranceSquared = tolerance * tolerance
-  const points = stroke.points
+  return stroke.points.map((point) => ({ x: point.x + offsetX, y: point.y + offsetY }))
+}
 
-  if (!points?.length) return true
+const pathsIntersect = (
+  first: CanvasPoint[],
+  second: CanvasPoint[],
+  closeFirst: boolean,
+  closeSecond: boolean,
+) => {
+  const firstSegments = Math.max(0, first.length - 1 + Number(closeFirst && first.length > 2))
+  const secondSegments = Math.max(0, second.length - 1 + Number(closeSecond && second.length > 2))
+  for (let firstIndex = 0; firstIndex < firstSegments; firstIndex++) {
+    const firstStart = first[firstIndex]
+    const firstEnd = first[(firstIndex + 1) % first.length]
+    for (let secondIndex = 0; secondIndex < secondSegments; secondIndex++) {
+      const secondStart = second[secondIndex]
+      const secondEnd = second[(secondIndex + 1) % second.length]
+      if (segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd)) return true
+    }
+  }
+  return false
+}
+
+const lassoHitsStroke = (lasso: CanvasPoint[], stroke: Stroke, zoom: number, wrapping: boolean) => {
+  const points = getStrokeWorldPoints(stroke)
+  if (points.length === 0) return false
+
+  if (wrapping) return points.every((point) => isPointInPolygon(point, lasso))
+
+  if (stroke.tool === "fill") {
+    return (
+      points.some((point) => isPointInPolygon(point, lasso)) ||
+      lasso.some((point) => isPointInPolygon(point, points)) ||
+      pathsIntersect(lasso, points, true, true)
+    )
+  }
+
+  if (points.some((point) => isPointInPolygon(point, lasso))) return true
+  if (pathsIntersect(lasso, points, true, false)) return true
+  return lasso.some((point) => pointsHitStroke(points, stroke.width, point, zoom))
+}
+
+const getClosedPathData = (points: CanvasPoint[]) =>
+  points.length < 3 ? "" : `M ${points.map((point) => `${point.x} ${point.y}`).join(" L ")} Z`
+
+const pointsHitStroke = (points: CanvasPoint[], width: number, point: CanvasPoint, zoom: number) => {
+  const tolerance = Math.max(width * 1.5, 8 / zoom)
+  const toleranceSquared = tolerance * tolerance
+
+  if (!points.length) return true
   if (points.length === 1) {
-    const dx = point.x - (points[0].x + offsetX)
-    const dy = point.y - (points[0].y + offsetY)
+    const dx = point.x - points[0].x
+    const dy = point.y - points[0].y
     return dx * dx + dy * dy <= toleranceSquared
   }
 
   for (let i = 1; i < points.length; i++) {
     const start = points[i - 1]
     const end = points[i]
-    const ax = start.x + offsetX
-    const ay = start.y + offsetY
-    const bx = end.x + offsetX
-    const by = end.y + offsetY
+    const ax = start.x
+    const ay = start.y
+    const bx = end.x
+    const by = end.y
     const abx = bx - ax
     const aby = by - ay
     const lengthSquared = abx * abx + aby * aby
@@ -157,11 +218,18 @@ const pointHitsStroke = (stroke: Stroke, point: CanvasPoint, zoom: number) => {
   return false
 }
 
+const pointHitsStroke = (stroke: Stroke, point: CanvasPoint, zoom: number) => {
+  const points = getStrokeWorldPoints(stroke)
+  if (stroke.tool === "fill") return isPointInPolygon(point, points)
+  return pointsHitStroke(points, stroke.width, point, zoom)
+}
+
 export const InfiniteCanvas: React.FC = () => {
   const ui = useCanvasStore((state) => state.ui)
   const addStroke = useCanvasStore((s) => s.addStroke)
   const addText = useCanvasStore((s) => s.addText)
   const updateText = useCanvasStore((s) => s.updateText)
+  const updateStrokeGeometry = useCanvasStore((s) => s.updateStrokeGeometry)
   const setCamera = useCanvasStore((s) => s.setCamera)
   const currentInputTypeRef = useRef<string>("mouse")
 
@@ -174,9 +242,12 @@ export const InfiniteCanvas: React.FC = () => {
   const cameraRef = useRef(ui.camera)
   const lastStablePointRef = useRef<{ x: number; y: number } | null>(null)
   const selectionRef = useRef<SelectionInteraction | null>(null)
+  const nudgeRef = useRef<NudgeInteraction | null>(null)
   const textAreaRef = useRef<HTMLTextAreaElement>(null)
   const textDraftRef = useRef<TextDraft | null>(null)
+  const fillRef = useRef<FillInteraction | null>(null)
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null)
+  const [fillPreview, setFillPreview] = useState<CanvasPoint[] | null>(null)
 
   useEffect(() => {
     cameraRef.current = ui.camera
@@ -249,6 +320,12 @@ export const InfiniteCanvas: React.FC = () => {
 
     ctx.save()
     const cam = cameraRef.current
+    const rect = rectRef.current
+    const centerX = rect?.width ? rect.width / 2 : canvas.clientWidth / 2
+    const centerY = rect?.height ? rect.height / 2 : canvas.clientHeight / 2
+    ctx.translate(centerX, centerY)
+    ctx.rotate((cam.rotation * Math.PI) / 180)
+    ctx.translate(-centerX, -centerY)
     ctx.translate(cam.x, cam.y)
     ctx.scale(cam.zoom, cam.zoom)
 
@@ -316,9 +393,16 @@ export const InfiniteCanvas: React.FC = () => {
         const candidateIds = candidates[layer.id]
         if (!candidateIds) continue
         for (const id of candidateIds) {
-          const bounds = state.doc.strokes[id]?.bounds ?? state.doc.texts[id]?.bounds
+          const stroke = state.doc.strokes[id]
+          const text = state.doc.texts[id]
+          const bounds = stroke?.bounds ?? text?.bounds
           if (!bounds) continue
-          if (wrapping ? lassoContainsBounds(lassoPoints, bounds) : lassoIntersectsBounds(lassoPoints, bounds)) {
+          const isSelected = stroke
+            ? lassoHitsStroke(lassoPoints, stroke, cameraRef.current.zoom, wrapping)
+            : wrapping
+              ? lassoContainsBounds(lassoPoints, bounds)
+              : lassoIntersectsBounds(lassoPoints, bounds)
+          if (isSelected) {
             nextIds.add(id)
           }
         }
@@ -332,9 +416,43 @@ export const InfiniteCanvas: React.FC = () => {
     [],
   )
 
+  const updateMarqueeSelection = useCallback(
+    (marquee: Bounds, initialSelectedIds: string[], additive: boolean, wrapping: boolean) => {
+      const state = useCanvasStore.getState()
+      const candidates = state.spatialIndex.query(marquee)
+      const nextIds = new Set(additive ? initialSelectedIds : [])
+      for (const layer of state.doc.layers) {
+        if (!layer.visible || layer.locked) continue
+        for (const id of candidates[layer.id] ?? []) {
+          const bounds = state.doc.strokes[id]?.bounds ?? state.doc.texts[id]?.bounds
+          if (!bounds) continue
+          const isSelected = wrapping
+            ? marquee.x <= bounds.x && marquee.y <= bounds.y && marquee.x + marquee.width >= bounds.x + bounds.width && marquee.y + marquee.height >= bounds.y + bounds.height
+            : boundsIntersect(marquee, bounds)
+          if (isSelected) nextIds.add(id)
+        }
+      }
+      const selectedIds = Array.from(nextIds)
+      if (!selectionEquals(state.ui.selectedStrokeIds, selectedIds)) state.setSelectedStrokes(selectedIds)
+    },
+    [],
+  )
+
   const handleSelectionStart = useCallback(
     (point: CanvasPoint, modifiers: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => {
       const state = useCanvasStore.getState()
+      if (hasToolFunction(state.ui.activeTool, "marquee")) {
+        const initialSelectedIds = state.ui.selectedStrokeIds
+        if (!modifiers.shiftKey && initialSelectedIds.length) state.setSelectedStrokes([])
+        selectionRef.current = {
+          origin: point,
+          initialSelectedIds,
+          mode: "pending",
+          hasHitStroke: false,
+          lassoPoints: [point],
+        }
+        return
+      }
       const hitStrokeId = findTopmostStrokeAtPoint(point)
       const initialSelectedIds = state.ui.selectedStrokeIds
 
@@ -384,11 +502,29 @@ export const InfiniteCanvas: React.FC = () => {
 
       const state = useCanvasStore.getState()
       if (interaction.mode === "pending") {
-        interaction.mode = interaction.hasHitStroke ? "translating" : "brushing"
+        if (hasToolFunction(state.ui.activeTool, "marquee")) {
+          interaction.mode = "marquee"
+        } else if (!interaction.hasHitStroke) {
+          interaction.mode = "brushing"
+        } else {
+          interaction.mode = "translating"
+        }
       }
 
       if (interaction.mode === "translating") {
         state.setSelectionTranslation({ x: dx, y: dy })
+        return
+      }
+
+      if (interaction.mode === "marquee") {
+        const marquee = {
+          x: Math.min(interaction.origin.x, point.x),
+          y: Math.min(interaction.origin.y, point.y),
+          width: Math.abs(point.x - interaction.origin.x),
+          height: Math.abs(point.y - interaction.origin.y),
+        }
+        state.setSelectionMarquee(marquee)
+        updateMarqueeSelection(marquee, interaction.initialSelectedIds, modifiers.shiftKey, modifiers.ctrlKey || modifiers.metaKey)
         return
       }
 
@@ -405,7 +541,7 @@ export const InfiniteCanvas: React.FC = () => {
         modifiers.ctrlKey || modifiers.metaKey,
       )
     },
-    [updateLassoSelection],
+    [updateLassoSelection, updateMarqueeSelection],
   )
 
   const handleSelectionEnd = useCallback(
@@ -420,6 +556,15 @@ export const InfiniteCanvas: React.FC = () => {
       if (interaction.mode === "translating") {
         state.translateStrokes(state.ui.selectedStrokeIds, dx, dy)
         state.setSelectionTranslation({ x: 0, y: 0 })
+      } else if (interaction.mode === "marquee") {
+        const marquee = {
+          x: Math.min(interaction.origin.x, point.x),
+          y: Math.min(interaction.origin.y, point.y),
+          width: Math.abs(point.x - interaction.origin.x),
+          height: Math.abs(point.y - interaction.origin.y),
+        }
+        updateMarqueeSelection(marquee, interaction.initialSelectedIds, modifiers.shiftKey, modifiers.ctrlKey || modifiers.metaKey)
+        state.setSelectionMarquee(null)
       } else if (interaction.mode === "brushing") {
         if (interaction.lassoPoints.length < 3) interaction.lassoPoints.push(point)
         updateLassoSelection(
@@ -431,8 +576,79 @@ export const InfiniteCanvas: React.FC = () => {
         state.setSelectionLasso(null)
       }
     },
-    [updateLassoSelection],
+    [updateLassoSelection, updateMarqueeSelection],
   )
+
+  const handleNudgeStart = useCallback((point: CanvasPoint) => {
+    const state = useCanvasStore.getState()
+    const strokeId = findTopmostStrokeAtPoint(point)
+    const stroke = strokeId ? state.doc.strokes[strokeId] : undefined
+    if (!stroke || stroke.points.length === 0) return
+
+    const layer = state.doc.layers.find((candidate) => candidate.id === stroke.layerId)
+    if (!layer || layer.locked) return
+    state.setSelectedStrokes([stroke.id])
+
+    const radius = NUDGE_RADIUS_PX / cameraRef.current.zoom
+    const offsetX = stroke.offset?.x ?? 0
+    const offsetY = stroke.offset?.y ?? 0
+    const influences = stroke.points.map((strokePoint) => {
+      const distance = Math.hypot(strokePoint.x + offsetX - point.x, strokePoint.y + offsetY - point.y)
+      const normalized = Math.max(0, 1 - distance / radius)
+      return normalized * normalized
+    })
+    const strongest = Math.max(...influences)
+    if (strongest === 0) return
+    nudgeRef.current = {
+      strokeId: stroke.id,
+      origin: point,
+      originalPoints: stroke.points.map((strokePoint) => ({ ...strokePoint })),
+      influences,
+    }
+  }, [findTopmostStrokeAtPoint])
+
+  const handleNudgeMove = useCallback((point: CanvasPoint) => {
+    const interaction = nudgeRef.current
+    if (!interaction) return
+    const state = useCanvasStore.getState()
+    const stroke = state.doc.strokes[interaction.strokeId]
+    if (!stroke) return
+    const dx = point.x - interaction.origin.x
+    const dy = point.y - interaction.origin.y
+    const points = interaction.originalPoints.map((strokePoint, index) => ({
+      ...strokePoint,
+      x: strokePoint.x + dx * interaction.influences[index],
+      y: strokePoint.y + dy * interaction.influences[index],
+    }))
+    const pathData = stroke.tool === "fill"
+      ? getClosedPathData(points)
+      : getSvgPathFromStroke(getStroke(points, { ...DEFAULT_BRUSH, size: stroke.width }))
+    state.setNudgePreview({ strokeId: stroke.id, pathData })
+  }, [])
+
+  const handleNudgeEnd = useCallback((point: CanvasPoint) => {
+    const interaction = nudgeRef.current
+    nudgeRef.current = null
+    if (!interaction) return
+    const state = useCanvasStore.getState()
+    const stroke = state.doc.strokes[interaction.strokeId]
+    const dx = point.x - interaction.origin.x
+    const dy = point.y - interaction.origin.y
+    if (!stroke || Math.hypot(dx, dy) < 0.01) {
+      state.setNudgePreview(null)
+      return
+    }
+    const points = interaction.originalPoints.map((strokePoint, index) => ({
+      ...strokePoint,
+      x: strokePoint.x + dx * interaction.influences[index],
+      y: strokePoint.y + dy * interaction.influences[index],
+    }))
+    const pathData = stroke.tool === "fill"
+      ? getClosedPathData(points)
+      : getSvgPathFromStroke(getStroke(points, { ...DEFAULT_BRUSH, size: stroke.width }))
+    state.setNudgePreview(null)
+    updateStrokeGeometry(stroke.id, points, pathData)
+  }, [updateStrokeGeometry])
 
   const commitText = useCallback((draftId?: string) => {
     const draft = textDraftRef.current
@@ -482,20 +698,76 @@ export const InfiniteCanvas: React.FC = () => {
     }
     const layer = state.doc.layers.find((candidate) => candidate.id === state.ui.activeLayerId)
     if (!layer || layer.locked) return
-    const zoom = cameraRef.current.zoom
     commitText()
     setTextDraftState({
       id: crypto.randomUUID(),
       x: point.x,
       y: point.y,
-      width: TEXT_MIN_WIDTH_PX / zoom,
-      height: TEXT_MIN_HEIGHT_PX / zoom,
+      width: TEXT_MIN_WIDTH_PX,
+      height: TEXT_MIN_HEIGHT_PX,
       text: "",
       layerId: layer.id,
       color: state.ui.activeColor,
       opacity: state.ui.activeOpacity,
     })
   }, [commitText, findTopmostStrokeAtPoint, setTextDraftState])
+
+  const handleFillStart = useCallback((point: CanvasPoint) => {
+    const state = useCanvasStore.getState()
+    const layer = state.doc.layers.find((candidate) => candidate.id === state.ui.activeLayerId)
+    if (!layer || layer.locked) return
+    const fill: FillInteraction = {
+      points: [point],
+      layerId: layer.id,
+      color: state.ui.activeColor,
+      opacity: state.ui.activeOpacity,
+    }
+    fillRef.current = fill
+    setFillPreview(fill.points)
+  }, [])
+
+  const handleFillMove = useCallback((point: CanvasPoint) => {
+    const fill = fillRef.current
+    if (!fill) return
+    const lastPoint = fill.points[fill.points.length - 1]
+    const minDistance = 2 / cameraRef.current.zoom
+    if (Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) < minDistance) return
+    fill.points.push(point)
+    setFillPreview([...fill.points])
+  }, [])
+
+  const handleFillEnd = useCallback((point: CanvasPoint) => {
+    const fill = fillRef.current
+    fillRef.current = null
+    setFillPreview(null)
+    if (!fill) return
+
+    const lastPoint = fill.points[fill.points.length - 1]
+    if (Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) > 1 / cameraRef.current.zoom) {
+      fill.points.push(point)
+    }
+    if (fill.points.length < 3) return
+
+    let doubledArea = 0
+    for (let index = 0; index < fill.points.length; index++) {
+      const current = fill.points[index]
+      const next = fill.points[(index + 1) % fill.points.length]
+      doubledArea += current.x * next.y - next.x * current.y
+    }
+    if (Math.abs(doubledArea) < 4 / (cameraRef.current.zoom * cameraRef.current.zoom)) return
+
+    addStroke({
+      id: crypto.randomUUID(),
+      pathData: getClosedPathData(fill.points),
+      points: fill.points.map((point) => ({ ...point, pressure: 0.5 })),
+      color: fill.color,
+      width: 0,
+      opacity: fill.opacity,
+      tool: "fill",
+      layerId: fill.layerId,
+      timestamp: Date.now(),
+    })
+  }, [addStroke])
 
   const { handlePointerDown, handlePointerMove, handlePointerUp, handleWheel } = useCanvasEvents({
     cameraRef,
@@ -615,6 +887,20 @@ export const InfiniteCanvas: React.FC = () => {
     onSelectionMove: handleSelectionMove,
     onSelectionEnd: handleSelectionEnd,
     onTextStart: handleTextStart,
+    onNudgeStart: handleNudgeStart,
+    onNudgeMove: handleNudgeMove,
+    onNudgeEnd: handleNudgeEnd,
+    onRotateMove: (dx) => {
+      const camera = {
+        ...cameraRef.current,
+        rotation: cameraRef.current.rotation + dx * 0.35,
+      }
+      cameraRef.current = camera
+      setCamera(camera)
+    },
+    onFillStart: handleFillStart,
+    onFillMove: handleFillMove,
+    onFillEnd: handleFillEnd,
   })
 
   useEffect(() => {
@@ -628,9 +914,11 @@ export const InfiniteCanvas: React.FC = () => {
   const cursorClass =
     ui.activeTool === "pan"
       ? "cursor-grab active:cursor-grabbing"
-      : ui.activeTool === "select" || hasToolFunction(ui.activeTool, "select") || hasToolFunction(ui.activeTool, "nudge")
+      : ui.activeTool === "select" || hasToolFunction(ui.activeTool, "select") || hasToolFunction(ui.activeTool, "marquee") || hasToolFunction(ui.activeTool, "nudge")
         ? "cursor-default"
         : "cursor-crosshair"
+  const viewportCenter = { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+  const cameraTransform = `translate(${viewportCenter.x}, ${viewportCenter.y}) rotate(${ui.camera.rotation}) translate(${-viewportCenter.x}, ${-viewportCenter.y}) translate(${ui.camera.x}, ${ui.camera.y}) scale(${ui.camera.zoom})`
 
   return (
     <div
@@ -646,9 +934,19 @@ export const InfiniteCanvas: React.FC = () => {
         className="absolute top-0 left-0 w-full h-full pointer-events-none"
         shapeRendering="geometricPrecision"
       >
-        <g transform={`translate(${ui.camera.x}, ${ui.camera.y}) scale(${ui.camera.zoom})`}>
+        <g transform={cameraTransform}>
           <Grid camera={ui.camera} />
           <Renderer />
+          {fillPreview && fillPreview.length > 1 && (
+            <path
+              d={getClosedPathData(fillPreview)}
+              fill={ui.activeColor}
+              fillOpacity={Math.min(ui.activeOpacity, 0.3)}
+              stroke={ui.activeColor}
+              strokeWidth={1 / ui.camera.zoom}
+              strokeLinejoin="round"
+            />
+          )}
           <SelectionOverlay />
         </g>
       </svg>
@@ -660,11 +958,11 @@ export const InfiniteCanvas: React.FC = () => {
       {textDraft && (
         <>
           <svg className="absolute inset-0 pointer-events-none z-10" aria-hidden="true">
-            <g stroke="#475569" strokeWidth={0.5} opacity={0.35}>
-              <line x1={textDraft.x * ui.camera.zoom + ui.camera.x} y1={0} x2={textDraft.x * ui.camera.zoom + ui.camera.x} y2="100%" />
-              <line x1={(textDraft.x + textDraft.width) * ui.camera.zoom + ui.camera.x} y1={0} x2={(textDraft.x + textDraft.width) * ui.camera.zoom + ui.camera.x} y2="100%" />
-              <line x1={0} y1={textDraft.y * ui.camera.zoom + ui.camera.y} x2="100%" y2={textDraft.y * ui.camera.zoom + ui.camera.y} />
-              <line x1={0} y1={(textDraft.y + textDraft.height) * ui.camera.zoom + ui.camera.y} x2="100%" y2={(textDraft.y + textDraft.height) * ui.camera.zoom + ui.camera.y} />
+            <g transform={cameraTransform} stroke="#475569" strokeWidth={0.5 / ui.camera.zoom} opacity={0.35}>
+              <line x1={textDraft.x} y1={-500000} x2={textDraft.x} y2={500000} />
+              <line x1={textDraft.x + textDraft.width} y1={-500000} x2={textDraft.x + textDraft.width} y2={500000} />
+              <line x1={-500000} y1={textDraft.y} x2={500000} y2={textDraft.y} />
+              <line x1={-500000} y1={textDraft.y + textDraft.height} x2={500000} y2={textDraft.y + textDraft.height} />
             </g>
           </svg>
           <textarea
@@ -674,14 +972,13 @@ export const InfiniteCanvas: React.FC = () => {
             onPointerDown={(event) => event.stopPropagation()}
             onChange={(event) => {
               const element = event.currentTarget
-              const zoom = cameraRef.current.zoom
               const current = textDraftRef.current
               if (!current) return
               setTextDraftState({
                 ...current,
                 text: element.value,
-                width: Math.max(TEXT_MIN_WIDTH_PX / zoom, element.scrollWidth / zoom),
-                height: Math.max(TEXT_MIN_HEIGHT_PX / zoom, element.scrollHeight / zoom),
+                width: Math.max(TEXT_MIN_WIDTH_PX, element.scrollWidth),
+                height: Math.max(TEXT_MIN_HEIGHT_PX, element.scrollHeight),
               })
             }}
             onKeyDown={(event) => {
@@ -697,10 +994,10 @@ export const InfiniteCanvas: React.FC = () => {
             onBlur={() => commitText(textDraft.id)}
             className="absolute z-20 resize-none overflow-hidden bg-transparent outline-none select-text"
             style={{
-              left: textDraft.x * ui.camera.zoom + ui.camera.x,
-              top: textDraft.y * ui.camera.zoom + ui.camera.y,
-              width: textDraft.width * ui.camera.zoom,
-              height: textDraft.height * ui.camera.zoom,
+              left: 0,
+              top: 0,
+              width: textDraft.width,
+              height: textDraft.height,
               minWidth: TEXT_MIN_WIDTH_PX,
               minHeight: TEXT_MIN_HEIGHT_PX,
               padding: 0,
@@ -708,9 +1005,11 @@ export const InfiniteCanvas: React.FC = () => {
               color: textDraft.color,
               opacity: textDraft.opacity,
               fontFamily: "inherit",
-              fontSize: `${16 * ui.camera.zoom}px`,
+              fontSize: "16px",
               lineHeight: 1.25,
               whiteSpace: "pre",
+              transform: `translate(${viewportCenter.x}px, ${viewportCenter.y}px) rotate(${ui.camera.rotation}deg) translate(${-viewportCenter.x}px, ${-viewportCenter.y}px) translate(${ui.camera.x}px, ${ui.camera.y}px) scale(${ui.camera.zoom}) translate(${textDraft.x}px, ${textDraft.y}px)`,
+              transformOrigin: "0 0",
             }}
           />
         </>

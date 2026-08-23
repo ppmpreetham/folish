@@ -5,6 +5,7 @@ import { mergeBounds } from "../../utils/bounds"
 export const SelectionOverlay = memo(() => {
   const selectedStrokeIds = useCanvasStore((state) => state.ui.selectedStrokeIds)
   const selectionLasso = useCanvasStore((state) => state.ui.selectionLasso)
+  const selectionMarquee = useCanvasStore((state) => state.ui.selectionMarquee)
   const selectionTranslation = useCanvasStore((state) => state.ui.selectionTranslation)
   const strokes = useCanvasStore((state) => state.doc.strokes)
   const texts = useCanvasStore((state) => state.doc.texts)
@@ -43,7 +44,19 @@ export const SelectionOverlay = memo(() => {
           strokeLinejoin="round"
         />
       )}
-      {selectedBounds && !selectionLasso && (
+      {selectionMarquee && (
+        <rect
+          x={selectionMarquee.x}
+          y={selectionMarquee.y}
+          width={selectionMarquee.width}
+          height={selectionMarquee.height}
+          fill="rgba(107, 114, 128, 0.08)"
+          stroke="#6b7280"
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${3 / camera.zoom} ${4 / camera.zoom}`}
+        />
+      )}
+      {selectedBounds && !selectionLasso && !selectionMarquee && (
         <>
           <g stroke="#6b7280" strokeWidth={guideWidth} opacity={0.3}>
             <line x1={selectedBounds.x + selectionTranslation.x} y1={viewport.y} x2={selectedBounds.x + selectionTranslation.x} y2={viewport.y + viewport.height} />

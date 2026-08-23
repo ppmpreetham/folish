@@ -9,13 +9,14 @@ export const Renderer = memo(() => {
   const camera = useCanvasStore((state) => state.ui.camera)
   const selectedStrokeIds = useCanvasStore((state) => state.ui.selectedStrokeIds)
   const selectionTranslation = useCanvasStore((state) => state.ui.selectionTranslation)
+  const nudgePreview = useCanvasStore((state) => state.ui.nudgePreview)
   const queryVisibleStrokes = useCanvasStore((state) => state.queryVisibleStrokes)
 
   const viewport = useMemo(() => {
     const width = window.innerWidth
     const height = window.innerHeight
     return getViewportBounds(camera, { width, height })
-  }, [camera.x, camera.y, camera.zoom])
+  }, [camera.x, camera.y, camera.zoom, camera.rotation])
 
   const visibleStrokesMap = useMemo(() => {
     return queryVisibleStrokes(viewport)
@@ -42,11 +43,12 @@ export const Renderer = memo(() => {
               const isMoving = selectedStrokeIdSet.has(stroke.id)
               const x = (stroke.offset?.x ?? 0) + (isMoving ? selectionTranslation.x : 0)
               const y = (stroke.offset?.y ?? 0) + (isMoving ? selectionTranslation.y : 0)
+              const pathData = nudgePreview?.strokeId === stroke.id ? nudgePreview.pathData : stroke.pathData
 
               return (
                 <path
                   key={stroke.id}
-                  d={stroke.pathData}
+                  d={pathData}
                   fill={stroke.color}
                   opacity={stroke.opacity}
                   strokeWidth={0}

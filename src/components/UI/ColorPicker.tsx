@@ -106,7 +106,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   const setActiveOpacity = useCanvasStore((state) => state.setActiveOpacity);
   const activeSmooth = useCanvasStore((state) => state.ui.activeSmooth);
   const setActiveSmooth = useCanvasStore((state) => state.setActiveSmooth);
-  const canPickColors = activeTool === "pen";
+  const canPickColors = activeTool === "pen" || activeTool === "fill";
 
   const isOpenRef = useRef(isOpen);
   const sidebarOpenRef = useRef(sidebarOpen);
@@ -434,7 +434,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
           } else if (seg.id === 8) {
             redo();
           } else {
-            if (isDoubleClick || sidebarOpenRef.current) {
+            if (isDoubleClick) {
               setEditingOption(seg.id);
               setSidebarOpen(true);
             } else {
@@ -442,7 +442,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
               if (!assignment) return;
               if (assignment.type === "brush") {
                 setActiveBrush(assignment.id);
-                setActiveTool("pen");
+                setActiveTool(assignment.id === "fill" ? "fill" : "pen");
               } else if (assignment.type === "tool") {
                 const tool = TOOLS.find((item) => item.id === assignment.id);
                 if (tool) setActiveTool(tool.id);
