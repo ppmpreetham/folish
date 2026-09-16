@@ -13,6 +13,8 @@ A high perf infinite canvas drawing application.
 
 ### What is Folish?
 
+<img src="readme/CGNAT.png" alt="Folish Logo">
+
 Folish is a digital sketchbook inspired by _Concepts_. It gives you a buttery smooth drawing experience.
 
 ## Installation
