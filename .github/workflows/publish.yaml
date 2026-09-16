@@ -28,26 +28,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Replaced setup-node and manual pnpm install with the modern standalone setup
-      - name: Setup pnpm and Runtime
-        uses: pnpm/setup@v2
+      # 1. Install the pnpm package manager globally on the runner
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
         with:
-          version: 11
-          runtime: node@lts/*
-          cache: true
+          version: 11 # Adjust this to match your local major version (e.g., 10 or 11)
 
+      # 2. Safely resolve the LTS Node wildcard and handle global package caching
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'pnpm'
+
+      # 3. Provision the Rust compiler environment
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      # 4. Inject system libraries needed for Linux OS bundles
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
 
+      # 5. Native project asset installation
+      - name: install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 6. Execute Tauri production build and package artifact uploads
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
