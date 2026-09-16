@@ -28,10 +28,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: setup node
-        uses: actions/setup-node@v4
+      # Replaced setup-node and manual pnpm install with the modern standalone setup
+      - name: Setup pnpm and Runtime
+        uses: pnpm/setup@v2
         with:
-          node-version: lts/*
+          runtime: node@lts/*
+          cache: true
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -44,9 +46,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
-
-      - name: install frontend dependencies
-        run: pnpm install # change this to npm, pnpm or bun depending on which one you use.
 
       - uses: tauri-apps/tauri-action@v1
         env:
