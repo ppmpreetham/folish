@@ -32,6 +32,7 @@ jobs:
       - name: Setup pnpm and Runtime
         uses: pnpm/setup@v2
         with:
+          version: 11
           runtime: node@lts/*
           cache: true
 
