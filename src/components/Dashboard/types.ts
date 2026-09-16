@@ -32,6 +32,7 @@ export interface BaseWrapper {
 
 export interface ArtboardWrapper extends BaseWrapper {
   type: ItemType.Artboard;
+  createdAt: Date;
   data: Artboard;
 }
 
@@ -41,6 +42,7 @@ export interface FolderWrapper extends BaseWrapper {
   description?: string;
   createdAt: Date;
   updatedAt: Date;
+  previews?: string[]; // child drawings for the tile collage
   grouping?: { grouping: Grouping; sortBy: SortBy };
   sorting?: { sorting: Sorting; sortBy: SortBy };
 }

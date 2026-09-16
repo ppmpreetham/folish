@@ -14,6 +14,7 @@ pub fn run() {
             file::save_canvas,
             file::load_canvas,
             file::get_thumbnails,
+            file::folder_previews,
             file::rename_item,
             file::get_dir_contents,
             file::create_folder,

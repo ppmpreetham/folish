@@ -93,7 +93,7 @@ pub struct FolderConfig {
 #[derive(Serialize, Debug)]
 #[serde(tag = "type")]
 pub enum ExplorerItem {
-    #[serde(rename_all = "camelCase")]
+    #[serde(rename = "folder", rename_all = "camelCase")]
     Folder {
         name: String,
         path: String,
@@ -101,11 +101,33 @@ pub enum ExplorerItem {
         created_at: u64,
         updated_at: u64,
     },
-    #[serde(rename_all = "camelCase")]
+    #[serde(rename = "file", rename_all = "camelCase")]
     File {
         name: String,
         path: String,
         created_at: u64,
         updated_at: u64,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The frontend dispatches on lowercase `type` and camelCase fields;
+    /// this pins the wire format.
+    #[test]
+    fn explorer_item_serializes_with_lowercase_tags_and_camel_case_fields() {
+        let json = serde_json::to_string(&ExplorerItem::File {
+            name: "a.flsh".into(),
+            path: "C:/x/a.flsh".into(),
+            created_at: 1,
+            updated_at: 2,
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"file","name":"a.flsh","path":"C:/x/a.flsh","createdAt":1,"updatedAt":2}"#
+        );
+    }
 }

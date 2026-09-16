@@ -6,7 +6,15 @@ import LayersNew from "./LayersNew";
 import Parameters from "./Parameters";
 import MenuBar from "./Parameters/MenuBar";
 
-function Interface() {
+export function Interface({
+  file,
+  onBack,
+  onRename,
+}: {
+  file: string;
+  onBack: () => void;
+  onRename: (newName: string) => void;
+}) {
   const undo = useCanvasStore((state) => state.undo);
   const redo = useCanvasStore((state) => state.redo);
   const deleteStrokes = useCanvasStore((state) => state.deleteStrokes);
@@ -54,11 +62,9 @@ function Interface() {
 
   return (
     <div className="w-screen h-screen overflow-hidden relative">
+      <MenuBar file={file} onBack={onBack} onRename={onRename} />
       <ColorPicker />
-      {/* <div className="w-screen h-screen bg-black" /> */}
       <InfiniteCanvas />
-      {/* <Toolbar /> */}
-      <MenuBar />
       <LayersNew className={showLayersPanel ? "" : "hidden"} />
       <Parameters className={showPrecisionPanel ? "" : "hidden"} />
     </div>

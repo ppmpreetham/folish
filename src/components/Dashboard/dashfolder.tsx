@@ -1,10 +1,9 @@
 import clsx from "clsx";
-import { Artboard } from "./types";
 import { Folder } from "phosphor-react";
 
 interface DashboardFolderProps {
   name: string;
-  artboards: Artboard[];
+  previews: string[];
   createdAt?: Date;
 }
 
@@ -18,7 +17,7 @@ const Panel = ({ src, className }: { src?: string; className?: string }) => (
   </div>
 );
 
-const DashboardFolder = ({ name, artboards, createdAt = new Date() }: DashboardFolderProps) => {
+const DashboardFolder = ({ name, previews, createdAt = new Date() }: DashboardFolderProps) => {
   const dateString = createdAt.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
@@ -28,10 +27,10 @@ const DashboardFolder = ({ name, artboards, createdAt = new Date() }: DashboardF
   return (
     <div className="w-64 flex flex-col group cursor-pointer select-none text-left">
       <div className="w-full h-48 bg-dash-bg rounded-xl grid grid-cols-2 gap-1 border border-transparent group-hover:border-gray-500 transition-all">
-        <Panel src={artboards[0]?.drawing} className="h-full rounded-l-lg" />
+        <Panel src={previews[0]} className="h-full rounded-l-lg" />
         <div className="h-full grid grid-rows-2 gap-1">
-          <Panel src={artboards[1]?.drawing} className="rounded-tr-lg" />
-          <Panel src={artboards[2]?.drawing} className="rounded-br-lg" />
+          <Panel src={previews[1]} className="rounded-tr-lg" />
+          <Panel src={previews[2]} className="rounded-br-lg" />
         </div>
       </div>
 

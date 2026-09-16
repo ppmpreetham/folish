@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { useCanvasStore } from "../stores/canvasStore"
+import { baseFileName, pathDir } from "../utils/paths"
 import type { FileMeta } from "../types"
 
 const THUMB_WIDTH = 320
@@ -43,7 +44,8 @@ const captureThumbnail = async (svg: SVGSVGElement): Promise<string> => {
  * Dirty-flag autosave, bound to one open file: strokes mutate the doc (marking
  * it dirty), one interval ticks, and a single in-flight save serializes +
  * captures the thumbnail. Backend merges meta, so `thumbnail: null` preserves
- * the previous image.
+ * the previous image. `file` is the opened drawing's full path; saving is
+ * skipped until one is open.
  */
 export const useAutoSave = (file: string | null, interval = 5000) => {
   const dirty = useRef(false)
@@ -61,7 +63,12 @@ export const useAutoSave = (file: string | null, interval = 5000) => {
     if (!file) return
 
     const save = (meta: FileMeta | null) =>
-      invoke("save_canvas", { canvas: useCanvasStore.getState().doc, meta, filename: file })
+      invoke("save_canvas", {
+        parent: pathDir(file),
+        filename: baseFileName(file),
+        canvas: useCanvasStore.getState().doc,
+        meta,
+      })
 
     const tick = async () => {
       if (!dirty.current || saving.current) return
@@ -86,6 +93,7 @@ export const useAutoSave = (file: string | null, interval = 5000) => {
     return () => {
       clearInterval(timer)
       window.removeEventListener("beforeunload", flush)
+      flush() // closing the editor or the app flushes pending strokes
     }
   }, [file, interval])
 }

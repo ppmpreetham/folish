@@ -189,6 +189,14 @@ const FolderView = ({
       .map((child) => child.data);
   };
 
+  const childPreviews = (item: DashboardItemData) => {
+    if (item.type !== ItemType.Folder) return [];
+    if (item.previews?.length) return item.previews;
+    return getChildArtboards(item)
+      .map((a) => a.drawing)
+      .filter(Boolean);
+  };
+
   return (
     <div className="flex flex-col gap-8 flex-1 text-left">
       <div className="flex flex-col">
@@ -315,7 +323,7 @@ const FolderView = ({
               <div key={item.id} onClick={() => setCurrentFolderId(item.id)}>
                 <DashboardFolder
                   name={item.name}
-                  artboards={getChildArtboards(item)}
+                  previews={childPreviews(item)}
                   createdAt={item.createdAt}
                 />
               </div>

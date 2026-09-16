@@ -588,7 +588,11 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     const { unrotated, rotated } = getMouseCoords(e.clientX, e.clientY);
 
     let activeHoverName: string | null = null;
-    const isCoreHovered = hitTestCtxRef.current!.isPointInPath(centerCorePathRef.current, unrotated.x, unrotated.y);
+    const isCoreHovered = hitTestCtxRef.current!.isPointInPath(
+      centerCorePathRef.current,
+      unrotated.x,
+      unrotated.y,
+    );
     if (isCoreHovered) {
       activeHoverName = `Active Color (${activeColorRef.current})`;
     }
@@ -696,7 +700,13 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
       const settingsEl = document.getElementById("canvas-settings-bar");
       const isOutsideSettings = settingsEl ? !settingsEl.contains(target) : true;
 
-      if (isOutsideCanvas && isOutsideSidebar && isOutsideProxy && isOutsideSlider && isOutsideSettings) {
+      if (
+        isOutsideCanvas &&
+        isOutsideSidebar &&
+        isOutsideProxy &&
+        isOutsideSlider &&
+        isOutsideSettings
+      ) {
         if (isOpenRef.current) {
           setIsOpen(false);
           setColorPickerOpen(false);
@@ -839,7 +849,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     <>
       <div
         ref={containerRef}
-        className="fixed top-0 left-0 z-50 pointer-events-none"
+        className="fixed top-10 left-4 z-50 pointer-events-none"
         style={{ width: SIZE, height: SIZE }}
       >
         {/* SLIDER POP-OUT UI */}
@@ -935,9 +945,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
         />
 
         {hoveredTooltip && (
-          <div
-            className="absolute -top-12 left-1/2 -translate-x-1/2 pointer-events-none px-3 py-1 bg-neutral-900/90 text-neutral-100 text-xs font-semibold rounded-full shadow-lg border border-neutral-700/60 whitespace-nowrap z-50 animate-in fade-in duration-150 backdrop-blur-md"
-          >
+          <div className="absolute -top-12 left-1/2 -translate-x-1/2 pointer-events-none px-3 py-1 bg-neutral-900/90 text-neutral-100 text-xs font-semibold rounded-full shadow-lg border border-neutral-700/60 whitespace-nowrap z-50 animate-in fade-in duration-150 backdrop-blur-md">
             {hoveredTooltip}
           </div>
         )}
@@ -950,12 +958,16 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
             let content = null;
 
             if (label.type === "middle") {
-              if (label.id === 0) content = <GradientIcon size={24} weight="bold" color="currentColor" />;
-              else if (label.id === 1) content = <ScribbleLoopIcon size={24} weight="bold" color="currentColor" />;
+              if (label.id === 0)
+                content = <GradientIcon size={24} weight="bold" color="currentColor" />;
+              else if (label.id === 1)
+                content = <ScribbleLoopIcon size={24} weight="bold" color="currentColor" />;
               else content = <CircleHalfIcon size={24} weight="fill" color="currentColor" />;
             } else {
               if (label.id === 7) {
-                content = <ArrowCounterClockwiseIcon size={26} weight="bold" color="currentColor" />;
+                content = (
+                  <ArrowCounterClockwiseIcon size={26} weight="bold" color="currentColor" />
+                );
               } else if (label.id === 8) {
                 content = <ArrowClockwiseIcon size={26} weight="bold" color="currentColor" />;
               } else {

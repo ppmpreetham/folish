@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { PencilSimple, Check, File } from "phosphor-react";
 import type { ReactNode } from "react";
-import { Artboard } from "./types";
 
 const dateString = (date: Date) =>
   date.toLocaleDateString("en-GB", {
@@ -73,7 +72,12 @@ const DashboardArtboard = ({
   name,
   createdAt,
   renameButton,
-}: Artboard & { renameButton?: ReactNode }) => (
+}: {
+  drawing: string;
+  name: string;
+  createdAt: Date;
+  renameButton?: ReactNode;
+}) => (
   <div className="w-64 flex flex-col group cursor-pointer select-none text-left">
     <div className="w-full h-48 bg-dash-bg rounded-xl border border-transparent group-hover:border-gray-500 transition-all">
       <div className="w-full h-full bg-white rounded-lg overflow-hidden flex items-center justify-center">

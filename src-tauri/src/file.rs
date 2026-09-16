@@ -105,19 +105,9 @@ pub async fn save_canvas(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub async fn load_canvas(
-    app_handle: AppHandle,
-    parent: Option<PathBuf>,
-    filename: String,
-) -> Result<CanvasDocument, String> {
-    let dir = match parent {
-        Some(p) => p,
-        None => get_canvas_dir(&app_handle)?,
-    };
-    let path = canvas_file_path(&dir, &filename);
-
+pub async fn load_canvas(path: PathBuf) -> Result<CanvasDocument, String> {
     if !path.exists() {
-        return Err(format!("Folish canvas not found: {}", filename));
+        return Err("Folish canvas not found".to_string());
     }
 
     read_document(&path)
@@ -216,6 +206,39 @@ pub async fn get_dir_contents(app_handle: AppHandle, path: Option<PathBuf>) -> R
 }
 
 /// renames a file or folder in place
+/// up to three embedded child thumbnails per folder, for the dashboard tiles
+#[tauri::command(rename_all = "camelCase")]
+pub async fn folder_previews(
+    paths: Vec<PathBuf>,
+) -> Result<HashMap<String, Vec<String>>, String> {
+    Ok(paths
+        .into_iter()
+        .map(|p| {
+            let mut children: Vec<PathBuf> = fs::read_dir(&p)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.is_file()
+                        && p.extension()
+                            .is_some_and(|e| e.eq_ignore_ascii_case(PROJECT_EXTENSION))
+                })
+                .collect();
+            children.sort(); // deterministic tiles
+
+            let drawings = children
+                .into_iter()
+                .take(3)
+                .filter_map(|c| read_document(&c).ok().and_then(|d| d.meta.thumbnail))
+                .filter(|t| !t.is_empty())
+                .collect();
+
+            (p.to_string_lossy().into_owned(), drawings)
+        })
+        .collect())
+}
+
 #[tauri::command(rename_all = "camelCase")]
 pub async fn rename_item(path: PathBuf, new_name: String) -> Result<(), String> {
     let target = path.with_file_name(&new_name);
