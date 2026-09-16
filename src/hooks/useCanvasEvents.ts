@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react"
 import { Point, Tool, Camera } from "../types"
 import { useCanvasMath } from "./useCanvasMath"
-import { hasToolFunction } from "../utils/toolsData"
+import { hasToolFunction, isShapeTool } from "../utils/toolsData"
 
 type CanvasPoint = Pick<Point, "x" | "y">
 
@@ -34,6 +34,9 @@ interface UseCanvasEventsProps {
   onFillStart?: (point: CanvasPoint) => void
   onFillMove?: (point: CanvasPoint) => void
   onFillEnd?: (point: CanvasPoint) => void
+  onShapeStart?: (point: CanvasPoint, modifiers: { shiftKey: boolean }) => void
+  onShapeMove?: (point: CanvasPoint, modifiers: { shiftKey: boolean }) => void
+  onShapeEnd?: (point: CanvasPoint, modifiers: { shiftKey: boolean }) => void
 }
 
 export const useCanvasEvents = (props: UseCanvasEventsProps) => {
@@ -46,6 +49,7 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
   const isFillingRef = useRef(false)
   const isNudgingRef = useRef(false)
   const isRotatingRef = useRef(false)
+  const isShapingRef = useRef(false)
   const lastPosRef = useRef({ x: 0, y: 0 })
   const rafRef = useRef<number | undefined>(undefined)
 
@@ -61,13 +65,19 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
       const current = propsRef.current
       const isPan = current.activeTool === "pan" || e.button === 1 || e.ctrlKey || e.metaKey
 
-      e.currentTarget.setPointerCapture(e.pointerId)
+      const isText = hasToolFunction(current.activeTool, "text")
+      if (!isText) {
+        e.currentTarget.setPointerCapture(e.pointerId)
+      }
       lastPosRef.current = { x: e.clientX, y: e.clientY }
 
       if (isPan) {
         isPanningRef.current = true
       } else if (hasToolFunction(current.activeTool, "rotate")) {
         isRotatingRef.current = true
+      } else if (isShapeTool(current.activeTool)) {
+        isShapingRef.current = true
+        current.onShapeStart?.(toWorld(e.clientX, e.clientY), { shiftKey: e.shiftKey })
       } else if (current.activeTool === "fill") {
         isFillingRef.current = true
         current.onFillStart?.(toWorld(e.clientX, e.clientY))
@@ -140,6 +150,8 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
           const dy = y - lastPosRef.current.y
           lastPosRef.current = { x, y }
           current.onRotateMove?.(dx, dy)
+        } else if (isShapingRef.current) {
+          current.onShapeMove?.(toWorld(x, y), { shiftKey: e.shiftKey })
         } else if (isFillingRef.current) {
           current.onFillMove?.(toWorld(x, y))
         } else if (isNudgingRef.current) {
@@ -170,6 +182,10 @@ export const useCanvasEvents = (props: UseCanvasEventsProps) => {
       }
       if (isPanningRef.current) isPanningRef.current = false
       if (isRotatingRef.current) isRotatingRef.current = false
+      if (isShapingRef.current) {
+        isShapingRef.current = false
+        current.onShapeEnd?.(toWorld(e.clientX, e.clientY), { shiftKey: e.shiftKey })
+      }
       if (isFillingRef.current) {
         isFillingRef.current = false
         current.onFillEnd?.(toWorld(e.clientX, e.clientY))

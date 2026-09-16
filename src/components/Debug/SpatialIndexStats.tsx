@@ -1,5 +1,6 @@
 import { useCanvasStore } from "../../stores/canvasStore"
 import { memo, useMemo } from "react"
+import { getViewportBounds } from "../../utils/bounds"
 
 export const SpatialIndexStats = memo(() => {
   const spatialIndex = useCanvasStore((state) => state.spatialIndex)
@@ -8,12 +9,7 @@ export const SpatialIndexStats = memo(() => {
   const queryVisibleStrokes = useCanvasStore((state) => state.queryVisibleStrokes)
 
   const stats = useMemo(() => {
-    const viewport = {
-      x: -camera.x / camera.zoom,
-      y: -camera.y / camera.zoom,
-      width: window.innerWidth / camera.zoom,
-      height: window.innerHeight / camera.zoom,
-    }
+    const viewport = getViewportBounds(camera, { width: window.innerWidth, height: window.innerHeight })
 
     const visibleGroups = queryVisibleStrokes(viewport)
 

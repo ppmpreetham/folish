@@ -1,5 +1,5 @@
 import RBush from "rbush"
-import { Bounds, Stroke, TextShape } from "../types"
+import { Bounds, ImageShape, ShapeShape, Stroke, TextShape } from "../types"
 
 export interface RBushItem {
   minX: number
@@ -30,7 +30,12 @@ export class SpatialIndex {
     }
   }
 
-  buildFromStrokes(strokes: Record<string, Stroke>, texts: Record<string, TextShape> = {}): void {
+  buildFromStrokes(
+    strokes: Record<string, Stroke>,
+    texts: Record<string, TextShape> = {},
+    images: Record<string, ImageShape> = {},
+    shapes: Record<string, ShapeShape> = {},
+  ): void {
     const items: RBushItem[] = []
     this.itemMap.clear()
     for (const [id, stroke] of Object.entries(strokes)) {
@@ -40,8 +45,18 @@ export class SpatialIndex {
         this.itemMap.set(id, item)
       }
     }
+    for (const [id, shape] of Object.entries(shapes)) {
+      const item = this.boundsToRBush(id, shape.layerId, shape.bounds)
+      items.push(item)
+      this.itemMap.set(id, item)
+    }
     for (const [id, text] of Object.entries(texts)) {
       const item = this.boundsToRBush(id, text.layerId, text.bounds)
+      items.push(item)
+      this.itemMap.set(id, item)
+    }
+    for (const [id, img] of Object.entries(images)) {
+      const item = this.boundsToRBush(id, img.layerId, img.bounds)
       items.push(item)
       this.itemMap.set(id, item)
     }

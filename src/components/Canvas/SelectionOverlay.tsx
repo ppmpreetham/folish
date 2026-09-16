@@ -3,7 +3,7 @@ import { useCanvasStore } from "../../stores/canvasStore"
 import { mergeBounds } from "../../utils/bounds"
 import { getSvgSelectionTransform } from "../../utils/selectionTransform"
 
-export const SelectionOverlay = memo(() => {
+export const SelectionOverlay = memo(({ editingTextId }: { editingTextId?: string }) => {
   const selectedStrokeIds = useCanvasStore((state) => state.ui.selectedStrokeIds)
   const selectionLasso = useCanvasStore((state) => state.ui.selectionLasso)
   const selectionMarquee = useCanvasStore((state) => state.ui.selectionMarquee)
@@ -13,17 +13,19 @@ export const SelectionOverlay = memo(() => {
   const selectionTransformOrigin = useCanvasStore((state) => state.ui.selectionTransformOrigin)
   const strokes = useCanvasStore((state) => state.doc.strokes)
   const texts = useCanvasStore((state) => state.doc.texts)
+  const images = useCanvasStore((state) => state.doc.images)
   const camera = useCanvasStore((state) => state.ui.camera)
 
   const selectedBounds = useMemo(() => {
     let bounds: { x: number; y: number; width: number; height: number } | undefined
     for (const id of selectedStrokeIds) {
-      const shapeBounds = strokes[id]?.bounds ?? texts[id]?.bounds
+      if (editingTextId && id === editingTextId) continue
+      const shapeBounds = strokes[id]?.bounds ?? texts[id]?.bounds ?? images?.[id]?.bounds
       if (!shapeBounds) continue
       bounds = bounds ? mergeBounds(bounds, shapeBounds) : shapeBounds
     }
     return bounds
-  }, [selectedStrokeIds, strokes, texts])
+  }, [selectedStrokeIds, strokes, texts, images, editingTextId])
 
   const strokeWidth = 1.5 / camera.zoom
   const guideWidth = 0.5 / camera.zoom

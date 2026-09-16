@@ -1,14 +1,2 @@
-export const DEFAULT_BRUSH = {
-  smoothing: 0.5,
-  thinning: 0.5,
-  streamline: 0.5,
-  easing: (t: any) => t,
-  start: {
-    taper: 0,
-    cap: true,
-  },
-  end: {
-    taper: 0,
-    cap: true,
-  },
-}
+// Backwards-compatible entry point for callers that historically imported this module.
+export { DEFAULT_BRUSH, getBrushProperties } from "./toolsData"

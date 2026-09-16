@@ -13,6 +13,7 @@ import {
 import { BRUSHES, TOOLS } from "../../utils/toolsData";
 import SideBar from "./Sidebar";
 import { getContrastColor } from "../../utils/rgb";
+import { CanvasBackgroundType } from "../../types";
 
 const BORDER_COLOR = "#ffffff";
 const MIDDLE_BG_COLOR = "#374151";
@@ -58,22 +59,27 @@ const domLabels = [
     const midStep = (Math.PI * 2) / 3;
     const aStart = i * midStep - Math.PI / 2 + MIDDLE_OFFSET;
     const aEnd = aStart + midStep;
-    const midA = (aStart + aEnd) / 2;
-    const midR = (CENTER_INNER_R + CENTER_MIDDLE_R) / 2;
+    const midAngle = (aStart + aEnd) / 2;
+    const r = (CENTER_INNER_R + CENTER_MIDDLE_R) / 2;
     return {
+      type: "middle" as const,
       id: i,
-      type: "middle",
-      cx: cx + Math.cos(midA) * midR,
-      cy: cy + Math.sin(midA) * midR,
+      cx: cx + Math.cos(midAngle) * r,
+      cy: cy + Math.sin(midAngle) * r,
     };
   }),
   ...Array.from({ length: 10 }).map((_, i) => {
-    const outerStep = (Math.PI * 2) / 10;
-    const aStart = i * outerStep - Math.PI / 2 + OUTER_OFFSET;
-    const aEnd = aStart + outerStep;
-    const midA = (aStart + aEnd) / 2;
-    const midR = (CENTER_MIDDLE_R + CENTER_OUTER_R) / 2;
-    return { id: i, type: "outer", cx: cx + Math.cos(midA) * midR, cy: cy + Math.sin(midA) * midR };
+    const outStep = (Math.PI * 2) / 10;
+    const aStart = i * outStep - Math.PI / 2 + OUTER_OFFSET;
+    const aEnd = aStart + outStep;
+    const midAngle = (aStart + aEnd) / 2;
+    const r = (CENTER_MIDDLE_R + CENTER_OUTER_R) / 2;
+    return {
+      type: "outer" as const,
+      id: i,
+      cx: cx + Math.cos(midAngle) * r,
+      cy: cy + Math.sin(midAngle) * r,
+    };
   }),
 ];
 
@@ -95,10 +101,15 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   const setActiveBrush = useCanvasStore((state) => state.setActiveBrush);
   const undo = useCanvasStore((state) => state.undo);
   const redo = useCanvasStore((state) => state.redo);
+  const [hoveredTooltip, setHoveredTooltip] = useState<string | null>(null);
   const sidebarOpen = useCanvasStore((state) => state.ui.sidebarOpen);
   const setSidebarOpen = useCanvasStore((state) => state.setSidebarOpen);
   const setEditingOption = useCanvasStore((state) => state.setEditingOption);
   const toolSlots = useCanvasStore((state) => state.ui.toolSlots);
+  const brushSettings = useCanvasStore((state) => state.ui.brushSettings);
+  const colorPickerOpen = useCanvasStore((state) => state.ui.colorPickerOpen);
+  const setColorPickerOpen = useCanvasStore((state) => state.setColorPickerOpen);
+  const setCanvasBackground = useCanvasStore((state) => state.setCanvasBackground);
 
   const activeWidth = useCanvasStore((state) => state.ui.activeWidth);
   const setActiveWidth = useCanvasStore((state) => state.setActiveWidth);
@@ -106,7 +117,14 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   const setActiveOpacity = useCanvasStore((state) => state.setActiveOpacity);
   const activeSmooth = useCanvasStore((state) => state.ui.activeSmooth);
   const setActiveSmooth = useCanvasStore((state) => state.setActiveSmooth);
-  const canPickColors = activeTool === "pen" || activeTool === "fill";
+  const selectedStrokeIds = useCanvasStore((state) => state.ui.selectedStrokeIds);
+  const colorPickerTarget = useCanvasStore((state) => state.ui.colorPickerTarget);
+  const canPickColors =
+    activeTool === "pen" ||
+    activeTool === "fill" ||
+    activeTool === "text" ||
+    colorPickerTarget === "canvasBackground" ||
+    (activeTool === "select" && selectedStrokeIds.length > 0);
 
   const isOpenRef = useRef(isOpen);
   const sidebarOpenRef = useRef(sidebarOpen);
@@ -115,6 +133,9 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
 
   const [activeMiddle, setActiveMiddle] = useState(0);
   const activeMiddleRef = useRef<number>(0);
+
+  const toolSlotsRef = useRef(toolSlots);
+  const brushSettingsRef = useRef(brushSettings);
 
   const rotationRef = useRef(0);
   const velocityRef = useRef(0);
@@ -254,8 +275,14 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
         if (isActive) {
           domEl.style.color = getContrastColor(currentActiveColor || "#ff69b4");
         } else {
-          const colorValue = Math.round(156 + seg.element.hoverAlpha * (255 - 156));
-          domEl.style.color = `rgb(${colorValue}, ${colorValue}, ${colorValue})`;
+          const assignment = seg.type === "outer" ? toolSlotsRef.current[seg.id] : null;
+          if (assignment && assignment.type === "brush") {
+            const bColor = brushSettingsRef.current[assignment.id]?.color;
+            domEl.style.color = bColor || "#ffffff";
+          } else {
+            const colorValue = Math.round(156 + seg.element.hoverAlpha * (255 - 156));
+            domEl.style.color = `rgb(${colorValue}, ${colorValue}, ${colorValue})`;
+          }
         }
 
         domEl.style.textShadow = "none";
@@ -289,6 +316,30 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     activeColorRef.current = activeColor;
     redrawCanvas();
   }, [activeColor, redrawCanvas]);
+
+  const activeBrush = useCanvasStore((state) => state.ui.activeBrush);
+  useEffect(() => {
+    const slotEntry = Object.entries(toolSlots).find(([_, assignment]) => {
+      if (assignment.type === "brush") {
+        return assignment.id === activeBrush && (activeTool === "pen" || activeTool === "fill");
+      }
+      return assignment.id === activeTool;
+    });
+    if (slotEntry) {
+      activeOuterRef.current = Number(slotEntry[0]);
+      redrawCanvas();
+    }
+  }, [activeTool, activeBrush, toolSlots, redrawCanvas]);
+
+  useEffect(() => {
+    toolSlotsRef.current = toolSlots;
+    redrawCanvas();
+  }, [toolSlots, redrawCanvas]);
+
+  useEffect(() => {
+    brushSettingsRef.current = brushSettings;
+    redrawCanvas();
+  }, [brushSettings, redrawCanvas]);
 
   const drawSwatch = (ctx: CanvasRenderingContext2D, swatch: SwatchData, isSelected = false) => {
     ctx.save();
@@ -373,9 +424,21 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
   useEffect(() => {
     if (canPickColors) return;
     setIsOpen(false);
+    setColorPickerOpen(false);
     setIsSliderOpen(false);
     toggleWheel(false);
-  }, [canPickColors, toggleWheel]);
+  }, [canPickColors, toggleWheel, setColorPickerOpen]);
+
+  useEffect(() => {
+    if (colorPickerOpen && !isOpenRef.current) {
+      setIsOpen(true);
+      setIsSliderOpen(false);
+      toggleWheel(true);
+    } else if (!colorPickerOpen && isOpenRef.current) {
+      setIsOpen(false);
+      toggleWheel(false);
+    }
+  }, [colorPickerOpen, toggleWheel]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     const { unrotated, rotated } = getMouseCoords(e.clientX, e.clientY);
@@ -434,12 +497,8 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
           } else if (seg.id === 8) {
             redo();
           } else {
-            if (isDoubleClick) {
-              setEditingOption(seg.id);
-              setSidebarOpen(true);
-            } else {
-              const assignment = toolSlots[seg.id];
-              if (!assignment) return;
+            const assignment = toolSlots[seg.id];
+            if (assignment) {
               if (assignment.type === "brush") {
                 setActiveBrush(assignment.id);
                 setActiveTool(assignment.id === "fill" ? "fill" : "pen");
@@ -447,6 +506,10 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
                 const tool = TOOLS.find((item) => item.id === assignment.id);
                 if (tool) setActiveTool(tool.id);
               }
+            }
+            if (isDoubleClick) {
+              setEditingOption(seg.id);
+              setSidebarOpen(true);
             }
           }
         }
@@ -466,9 +529,18 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     );
 
     if (clickedSwatch) {
-      setActiveColor(clickedSwatch.color);
+      const target = useCanvasStore.getState().ui.colorPickerTarget;
+      if (target === "canvasBackground") {
+        setCanvasBackground({
+          type: CanvasBackgroundType.Custom,
+          color: clickedSwatch.color,
+        });
+      } else {
+        setActiveColor(clickedSwatch.color);
+      }
       if (onChange) onChange(clickedSwatch.color);
       setIsOpen(false);
+      setColorPickerOpen(false);
       setIsSliderOpen(false);
       toggleWheel(false);
       return;
@@ -480,6 +552,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
 
     if (dist > MAX_RADIUS) {
       setIsOpen(false);
+      setColorPickerOpen(false);
       setIsSliderOpen(false);
       toggleWheel(false);
       return;
@@ -514,8 +587,39 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
 
     const { unrotated, rotated } = getMouseCoords(e.clientX, e.clientY);
 
+    let activeHoverName: string | null = null;
+    const isCoreHovered = hitTestCtxRef.current!.isPointInPath(centerCorePathRef.current, unrotated.x, unrotated.y);
+    if (isCoreHovered) {
+      activeHoverName = `Active Color (${activeColorRef.current})`;
+    }
+
     centerSegmentsRef.current.forEach((seg) => {
       const isHovered = hitTestCtxRef.current!.isPointInPath(seg.path, unrotated.x, unrotated.y);
+      if (isHovered && !activeHoverName) {
+        if (seg.type === "middle") {
+          if (seg.id === 0) activeHoverName = "Color Wheel & Swatches";
+          else if (seg.id === 1) activeHoverName = "Brush Size / Width";
+          else activeHoverName = "Opacity & Smoothing";
+        } else {
+          if (seg.id === 7) activeHoverName = "Undo";
+          else if (seg.id === 8) activeHoverName = "Redo";
+          else {
+            const assignment = toolSlots[seg.id];
+            if (assignment) {
+              if (assignment.type === "brush") {
+                const b = BRUSHES.find((item) => item.id === assignment.id);
+                activeHoverName = b ? `Brush: ${b.name}` : "Brush";
+              } else {
+                const t = TOOLS.find((item) => item.id === assignment.id);
+                activeHoverName = t ? `Tool: ${t.name}` : "Tool";
+              }
+            } else {
+              activeHoverName = `Slot ${seg.id + 1}`;
+            }
+          }
+        }
+      }
+
       const target = isHovered ? 1 : 0;
       if (seg.element.hoverAlpha !== target) {
         gsap.to(seg.element, {
@@ -526,6 +630,8 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
         });
       }
     });
+
+    setHoveredTooltip(activeHoverName);
 
     if (!isOpenRef.current) return;
 
@@ -547,6 +653,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
     if (pointerDownOnCoreRef.current) {
       const newState = !isOpenRef.current;
       setIsOpen(newState);
+      setColorPickerOpen(newState);
       setIsSliderOpen(false);
       toggleWheel(newState);
       pointerDownOnCoreRef.current = false;
@@ -586,10 +693,13 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
       const isOutsideProxy = proxyEl ? !proxyEl.contains(target) : true;
       const sliderEl = document.getElementById("popout-slider");
       const isOutsideSlider = sliderEl ? !sliderEl.contains(target) : true;
+      const settingsEl = document.getElementById("canvas-settings-bar");
+      const isOutsideSettings = settingsEl ? !settingsEl.contains(target) : true;
 
-      if (isOutsideCanvas && isOutsideSidebar && isOutsideProxy && isOutsideSlider) {
+      if (isOutsideCanvas && isOutsideSidebar && isOutsideProxy && isOutsideSlider && isOutsideSettings) {
         if (isOpenRef.current) {
           setIsOpen(false);
+          setColorPickerOpen(false);
           toggleWheel(false);
         }
         setSidebarOpen(false);
@@ -818,8 +928,19 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
+          onPointerLeave={() => {
+            handlePointerUp();
+            setHoveredTooltip(null);
+          }}
         />
+
+        {hoveredTooltip && (
+          <div
+            className="absolute -top-12 left-1/2 -translate-x-1/2 pointer-events-none px-3 py-1 bg-neutral-900/90 text-neutral-100 text-xs font-semibold rounded-full shadow-lg border border-neutral-700/60 whitespace-nowrap z-50 animate-in fade-in duration-150 backdrop-blur-md"
+          >
+            {hoveredTooltip}
+          </div>
+        )}
 
         <div
           className="absolute top-1/2 left-1/2 pointer-events-none z-20"
@@ -829,14 +950,14 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
             let content = null;
 
             if (label.type === "middle") {
-              if (label.id === 0) content = <GradientIcon size={24} weight="bold" />;
-              else if (label.id === 1) content = <ScribbleLoopIcon size={24} weight="bold" />;
-              else content = <CircleHalfIcon size={24} weight="fill" />;
+              if (label.id === 0) content = <GradientIcon size={24} weight="bold" color="currentColor" />;
+              else if (label.id === 1) content = <ScribbleLoopIcon size={24} weight="bold" color="currentColor" />;
+              else content = <CircleHalfIcon size={24} weight="fill" color="currentColor" />;
             } else {
               if (label.id === 7) {
-                content = <ArrowCounterClockwiseIcon size={26} weight="bold" />;
+                content = <ArrowCounterClockwiseIcon size={26} weight="bold" color="currentColor" />;
               } else if (label.id === 8) {
-                content = <ArrowClockwiseIcon size={26} weight="bold" />;
+                content = <ArrowClockwiseIcon size={26} weight="bold" color="currentColor" />;
               } else {
                 const assignment = toolSlots[label.id];
                 if (assignment) {
@@ -846,9 +967,7 @@ const ColorPicker = ({ onChange }: { onChange?: (hex: string) => void }) => {
                       : TOOLS.find((t) => t.id === assignment.id);
                   if (item && item.logo) {
                     const Logo = item.logo;
-                    content = assignment.type === "brush" ? (
-                      <span style={{ color: activeColor }}><Logo size={24} weight="fill" /></span>
-                    ) : <Logo size={24} weight="fill" />;
+                    content = <Logo size={24} weight="fill" color="currentColor" />;
                   } else {
                     content = <span>{label.id + 1}</span>;
                   }

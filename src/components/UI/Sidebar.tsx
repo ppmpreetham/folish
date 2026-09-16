@@ -1,13 +1,18 @@
 import { X as XIcon } from "phosphor-react"
 import { useCanvasStore } from "../../stores/canvasStore"
-import { BRUSHES, TOOLS } from "../../utils/toolsData"
+import { BRUSHES, SHAPE_TOOLS, TOOLS } from "../../utils/toolsData"
+import type { ShapeKind } from "../../types"
 
 const SideBar = () => {
   const setSidebarOpen = useCanvasStore((state) => state.setSidebarOpen)
   const editingOption = useCanvasStore((state) => state.ui.editingOption)
   const toolSlots = useCanvasStore((state) => state.ui.toolSlots)
+  const activeToolId = useCanvasStore((state) => state.ui.activeTool)
   const setSlotAssignment = useCanvasStore((state) => state.setSlotAssignment)
-  const activeColor = useCanvasStore((state) => state.ui.activeColor)
+  const setActiveBrush = useCanvasStore((state) => state.setActiveBrush)
+  const setActiveTool = useCanvasStore((state) => state.setActiveTool)
+  const setActiveShapeKind = useCanvasStore((state) => state.setActiveShapeKind)
+  const brushSettings = useCanvasStore((state) => state.ui.brushSettings)
 
   const currentAssignment = editingOption !== null ? toolSlots[editingOption] : null
 
@@ -34,6 +39,7 @@ const SideBar = () => {
               const Logo = brush.logo
               const isActive =
                 currentAssignment?.type === "brush" && currentAssignment?.id === brush.id
+              const brushColor = brushSettings[brush.id]?.color ?? "#ffffff"
               return (
                 <button
                   key={brush.id}
@@ -41,6 +47,8 @@ const SideBar = () => {
                     if (editingOption !== null) {
                       setSlotAssignment(editingOption, { type: "brush", id: brush.id })
                     }
+                    setActiveBrush(brush.id)
+                    setActiveTool(brush.id === "fill" ? "fill" : "pen")
                   }}
                   className={`p-4 text-sm font-semibold transition-colors flex flex-col items-center gap-2 border rounded-xl ${
                     isActive
@@ -48,8 +56,39 @@ const SideBar = () => {
                       : "bg-black border-gray-700 hover:border-gray-500 hover:bg-gray-900 text-gray-300"
                   }`}
                 >
-                  <Logo size={24} weight={isActive ? "fill" : "duotone"} color={activeColor} />
+                  <Logo size={24} weight={isActive ? "fill" : "duotone"} color={brushColor} />
                   {brush.name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-xl font-bold uppercase tracking-widest mb-4">Shapes</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {SHAPE_TOOLS.map((tool) => {
+              const Logo = tool.logo
+              const isActive =
+                (currentAssignment?.type === "tool" && currentAssignment?.id === tool.id) ||
+                (editingOption === null && tool.id === activeToolId)
+              return (
+                <button
+                  key={tool.id}
+                  onClick={() => {
+                    if (editingOption !== null) {
+                      setSlotAssignment(editingOption, { type: "tool", id: tool.id })
+                    }
+                    setActiveShapeKind(tool.id as ShapeKind)
+                  }}
+                  className={`p-4 text-sm font-semibold transition-colors flex flex-col items-center gap-2 border rounded-xl ${
+                    isActive
+                      ? "bg-gray-800 border-white text-white"
+                      : "bg-black border-gray-700 hover:border-gray-500 hover:bg-gray-900 text-gray-300"
+                  }`}
+                >
+                  <Logo size={24} weight={isActive ? "fill" : "duotone"} />
+                  {tool.name}
                 </button>
               )
             })}
@@ -70,6 +109,7 @@ const SideBar = () => {
                     if (editingOption !== null) {
                       setSlotAssignment(editingOption, { type: "tool", id: tool.id })
                     }
+                    setActiveTool(tool.id)
                   }}
                   className={`p-4 text-sm font-semibold transition-colors flex flex-col items-center gap-2 border rounded-xl ${
                     isActive

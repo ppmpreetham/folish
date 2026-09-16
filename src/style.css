@@ -12,6 +12,7 @@ polyline[pressure-aware] {
   --color-dark-tertiary: #1a1a1a;
   --color-settings-hover: #1a1a1a;
   --color-settings-back: #0a0a0a;
+  --color-dash-bg: #5e5e5e;
 }
 
 input,
