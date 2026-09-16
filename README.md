@@ -2,7 +2,8 @@
 
 <div align="center">
 
-**A high-performance infinite canvas drawing application.**
+<img src="readme/folish-gh.png" alt="Folish Logo">
+A high perf infinite canvas drawing application.
 
 [Download](https://github.com/ppmpreetham/folish/releases) · [Roadmap](https://www.google.com/search?q=%23-roadmap) · [Discord](https://www.google.com/search?q=https://discord.gg/rickroll)
 
@@ -12,21 +13,24 @@
 
 ### What is Folish?
 
-Folish is a digital sketchbook inspired by _Concepts_. It gives you a buttery-smooth drawing experience.
+Folish is a digital sketchbook inspired by _Concepts_. It gives you a buttery smooth drawing experience.
+
+## Installation
+
+- **Windows:** Available in [Releases](https://github.com/ppmpreetham/releases/latest) page. There are two versions:
+  - Installer version. Recommended, since it automatically associates .infpnt files with InfiniPaint
+  - Portable version, which is a zip file containing the executable and data files, and stores configuration files next to the executable. Not recommended unless you are specifically looking for a portable version
+- **macOS:** Available in [Releases](https://github.com/ppmpreetham/folish/releases/latest) page. Only for Apple Silicon
+- **Linux:** There are flatpak bundles available for download on the [Releases](https://github.com/ppmpreetham/folish/releases/latest) page for both `x86_64` and `arm64`
 
 ### Custom Installation
 
 Ensure you have [Node.js](https://www.google.com/search?q=https://nodejs.org/) (v16+) and [Rust](https://www.google.com/search?q=https://www.rust-lang.org/) installed.
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/ppmpreetham/folish.git
 cd folish
-
-# 2. Install dependencies
-pnpm install
-
-# 3. Run in development mode
+pnpm i
 pnpm tauri dev
 ```
 
@@ -37,14 +41,15 @@ pnpm tauri dev
 
 ### Features
 
-Folish is packed with professional-grade tools designed for speed and precision.
+Folish is packed with professional grade tools designed for speed and precision.
 
 ### The Engine
 
 - **Infinite Canvas:** No boundaries. Pan and zoom forever.
-- **High-Performance:** Optimized SVG rendering with canvas overlays for live strokes using `requestAnimationFrame`.
+- **High Performance:** Optimized SVG rendering with canvas overlays for live strokes using `requestAnimationFrame`.
 - **Velocity Smoothing:** Adaptive algorithms that stabilize your lines based on drawing speed.
 - **Stylus Support:** Full pressure sensitivity for Wacom, Huion, and tablet devices.
+- **Selection & Transform**: Manipulate existing strokes.
 
 ### Layer Management
 
@@ -54,7 +59,7 @@ Organize your artwork with a robust layer system.
 | --------------------- | ------------------------------------------------------------- |
 | **Unlimited Layers**  | Create as many layers as your RAM allows.                     |
 | **Visibility & Lock** | Toggle visibility or lock layers to prevent accidental edits. |
-| **Opacity Control**   | Real-time transparency adjustment per layer.                  |
+| **Opacity Control**   | Real time transparency adjustment per layer.                  |
 | **Thumbnails**        | Live visual previews of layer contents.                       |
 | **Drag & Sort**       | Auto or manual sorting to arrange your stack.                 |
 
@@ -66,29 +71,15 @@ Organize your artwork with a robust layer system.
 
 ---
 
-### Controls & Shortcuts
-
-Folish is designed for efficiency. Use these shortcuts to speed up your workflow.
-
-| Action           | Shortcut                            |
-| ---------------- | ----------------------------------- |
-| **Undo**         | `Ctrl` + `Z`                        |
-| **Redo**         | `Ctrl` + `Shift` + `Z`              |
-| **Pan Canvas**   | `Middle Mouse` _or_ `Ctrl` + `Drag` |
-| **Zoom**         | `Scroll Wheel`                      |
-| **Context Menu** | `Right Click` (on layers)           |
-
----
-
 ### Tech Stack
 
 Folish leverages the best modern web and systems programming technologies.
 
-- **Core:** [Tauri](https://www.google.com/search?q=https://tauri.app) (Rust)
-- **Frontend:** [React](https://www.google.com/search?q=https://react.dev) + [TypeScript](https://www.google.com/search?q=https://www.typescriptlang.org/)
-- **State:** [Zustand](https://github.com/pmndrs/zustand) (Persistence) + [Immer](https://www.google.com/search?q=https://github.com/immerjs/immer) (Patches)
+- **Core:** [Tauri](https://tauri.app) (Rust)
+- **Frontend:** [React](https://react.dev) + [TypeScript](https://www.typescriptlang.org/)
+- **State:** [Zustand](https://github.com/pmndrs/zustand) (Persistence) + [Immer](https://github.com/immerjs/immer) (Patches)
 - **Rendering:** [perfect-freehand](https://github.com/steveruizok/perfect-freehand)
-- **Styling:** [Tailwind CSS](https://www.google.com/search?q=https://tailwindcss.com/) + [Phosphor Icons](https://www.google.com/search?q=https://phosphoricons.com/)
+- **Styling:** [Tailwind CSS](https://tailwindcss.com) + [Phosphor Icons](https://phosphoricons.com)
 
 ---
 
@@ -96,11 +87,10 @@ Folish leverages the best modern web and systems programming technologies.
 
 I am actively working on the following features:
 
-- [ ] **Selection & Transform:** Manipulate existing strokes.
 - [ ] **Export Options:** SVG, PNG, and PDF export support.
 - [ ] **Shape Tools:** Geometric primitives (Rectangle, Circle, Line).
 - [ ] **Cloud Sync:** Collaborate and sync across devices.
-- [ ] **Plugin System:** Community-driven extensions.
+- [ ] **Plugin System:** Community driven extensions.
 - [ ] **Rulers:** Measurement and guide tools.
 
 ---
@@ -131,7 +121,3 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 - [perfect-freehand](https://github.com/steveruizok/perfect-freehand) for the stroke algorithm.
 - [Concepts](https://concepts.app/) for the UI/UX inspiration.
-
-```
-
-```
