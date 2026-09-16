@@ -128,7 +128,7 @@ const Dashboard = () => {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [version, setVersion] = useState(0); // bumped after creates to re-list
   const [openFile, setOpenFile] = useState<string | null>(null);
-  useAutoSave(openFile);
+  const flushSave = useAutoSave(openFile);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,7 +261,11 @@ const Dashboard = () => {
 
   if (openFile) {
     return (
-      <Interface file={openFile} onBack={() => setOpenFile(null)} onRename={renameOpenFile} />
+      <Interface
+        file={openFile}
+        onBack={() => void flushSave().then(() => setOpenFile(null))}
+        onRename={renameOpenFile}
+      />
     );
   }
 

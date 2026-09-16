@@ -46,10 +46,15 @@ const captureThumbnail = async (svg: SVGSVGElement): Promise<string> => {
  * captures the thumbnail. Backend merges meta, so `thumbnail: null` preserves
  * the previous image. `file` is the opened drawing's full path; saving is
  * skipped until one is open.
+ *
+ * Returns `flush()`, which resolves once every pending stroke is on disk --
+ * await it before anything that re-reads the file (e.g. leaving the editor).
  */
 export const useAutoSave = (file: string | null, interval = 5000) => {
   const dirty = useRef(false)
   const saving = useRef(false)
+  const inflight = useRef<Promise<void>>(Promise.resolve())
+  const flushRef = useRef<() => Promise<void>>(async () => {})
 
   useEffect(
     () =>
@@ -60,7 +65,12 @@ export const useAutoSave = (file: string | null, interval = 5000) => {
   )
 
   useEffect(() => {
-    if (!file) return
+    if (!file) {
+      flushRef.current = async () => {}
+      return
+    }
+
+    dirty.current = false // a fresh open has nothing unsaved (loadDoc marks dirty)
 
     const save = (meta: FileMeta | null) =>
       invoke("save_canvas", {
@@ -70,30 +80,46 @@ export const useAutoSave = (file: string | null, interval = 5000) => {
         meta,
       })
 
-    const tick = async () => {
-      if (!dirty.current || saving.current) return
+    // One writer, ever: joins the running save instead of racing it. Clears
+    // dirty at snap time; strokes drawn during thumbnail capture re-mark it.
+    const saveDirty = (): Promise<void> => {
+      if (saving.current) return inflight.current
       saving.current = true
       dirty.current = false
-      try {
-        const svg = document.getElementById(CANVAS_SVG_ID) as SVGSVGElement | null
-        await save({ thumbnail: svg ? await captureThumbnail(svg) : null })
-      } catch (error) {
-        dirty.current = true // retry on the next tick
-        console.error("Auto-save failed:", error)
-      } finally {
-        saving.current = false
-      }
+      inflight.current = (async () => {
+        try {
+          const svg = document.getElementById(CANVAS_SVG_ID) as SVGSVGElement | null
+          const thumbnail = svg ? await captureThumbnail(svg) : null
+          await save({ thumbnail })
+        } catch (error) {
+          dirty.current = true // retry on the next tick
+          console.error("Auto-save failed:", error)
+        } finally {
+          saving.current = false
+        }
+      })()
+      return inflight.current
     }
 
-    // Final flush on close: data only -- the backend keeps the last thumbnail.
-    const flush = () => void save(null).catch(() => {})
+    // Resolves with every pending stroke on disk (a capture can miss strokes
+    // drawn mid-save, so loop until clean).
+    const flush = async () => {
+      for (let i = 0; i < 3 && dirty.current; i++) await saveDirty()
+    }
+    flushRef.current = flush
 
-    const timer = setInterval(tick, interval)
-    window.addEventListener("beforeunload", flush)
+    const timer = setInterval(() => {
+      if (dirty.current) void saveDirty()
+    }, interval)
+
+    const onUnload = () => void flush()
+    window.addEventListener("beforeunload", onUnload)
     return () => {
       clearInterval(timer)
-      window.removeEventListener("beforeunload", flush)
-      flush() // closing the editor or the app flushes pending strokes
+      window.removeEventListener("beforeunload", onUnload)
+      void flush() // unmount (HMR) with unsaved strokes still writes
     }
   }, [file, interval])
+
+  return () => flushRef.current()
 }
