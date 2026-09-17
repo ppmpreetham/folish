@@ -19,7 +19,7 @@ Folish is a digital sketchbook inspired by _Concepts_. It gives you a buttery sm
 
 ## Installation
 
-- **Windows:** Available in [Releases](https://github.com/ppmpreetham/releases/latest) page. There are two versions:
+- **Windows:** Available in [Releases](https://github.com/ppmpreetham/folish/releases/latest) page. There are two versions:
   - Installer version. Recommended, since it automatically associates .infpnt files with InfiniPaint
   - Portable version, which is a zip file containing the executable and data files, and stores configuration files next to the executable. Not recommended unless you are specifically looking for a portable version
 - **macOS:** Available in [Releases](https://github.com/ppmpreetham/folish/releases/latest) page. Only for Apple Silicon
