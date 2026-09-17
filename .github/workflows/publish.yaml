@@ -3,7 +3,7 @@ name: "publish"
 on:
   push:
     branches:
-      - main
+      - release
 
 # This workflow will trigger on each push to the `main` branch to create or update a GitHub release, build your app, and upload the artifacts to the release.
 
@@ -39,7 +39,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: 'pnpm'
+          cache: "pnpm"
 
       # 3. Provision the Rust compiler environment
       - name: install Rust stable
